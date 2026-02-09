@@ -8,6 +8,35 @@ from skimage.color import rgb2lab
 
 TRANSPARENT = (0, 0, 0, 0)
 
+def words_with_style(page, words):
+	styled = []
+
+	for w in words:
+		chars = [
+			c for c in page.chars
+			if c["x0"] >= w["x0"]
+			and c["x1"] <= w["x1"]
+			and c["top"] >= w["top"]
+			and c["bottom"] <= w["bottom"]
+		]
+
+		if not chars:
+			continue
+
+		sizes = [c["size"] for c in chars]
+		fonts = [c["fontname"] for c in chars]
+
+		styled.append({
+			**w,
+			"fontname": max(set(fonts), key=fonts.count),
+			"size": round(sum(sizes) / len(sizes), 2),
+			"bold": any("bold" in f.lower() for f in fonts),
+			"italic": any("italic" in f.lower() or "oblique" in f.lower() for f in fonts),
+		})
+
+	return styled
+
+
 def bbox_to_rect(b):
     return {"x0": b[0], "top": b[1], "x1": b[2], "bottom": b[3]}
 
@@ -228,222 +257,288 @@ def get_scenerario(words, header):
 
     return title_text, reference_text
 
-# End function specifically for Frosthaven scenario book
-pdf = pdfplumber.open("input/page_007.pdf")  # See note below
-page = pdf.pages[0]
-im = page.to_image(72)
-pil_img = im.original
+# get a list of all the files in the input directory
+import os
+input_files = [f for f in os.listdir("input") if os.path.isfile(os.path.join("input", f))]
+print("Input files:", input_files)
 
-# get the width of the page
-page_width = page.width
-page_height = page.height
+for entry in input_files:
 
-print(f"Page width: {page_width}")
+    if entry != "page_007.pdf":
+        continue
 
-# Get All the words on the page
-words = page.extract_words()
-rects = page.rects
-images = page.images
+    # End function specifically for Frosthaven scenario book
+    pdf = pdfplumber.open(f"input/{entry}")  # See note below
+    print("Processing file:", entry)
+    try:
+        page = pdf.pages[0]
+        im = page.to_image(72)
+        pil_img = im.original
 
-exclude = []
+        # get the width of the page
+        page_width = page.width
+        page_height = page.height
 
-# remove the first image (it's the full page background)
-images = images[1:]
+        # Get All the words on the page
+        words = page.extract_words()
+        rects = page.rects
+        images = page.images
 
-for image in images:
-    # convert image into to a rectangle
-    x0 = image["x0"]
-    x1 = image["x1"]
-    top = image.get("top", image["y0"])
-    bottom = image.get("bottom", image["y1"])
+        exclude = []
 
-    r = {
-        "x0": x0,
-        "x1": x1,
-        "top": top,
-        "bottom": bottom
-    }
+        words = words_with_style(page, words)
 
-for rect in rects:
-    # im.draw_rect(rect, stroke="red", fill=None, stroke_width=5)
-    exclude.append(rect)
+        # remove the first image (it's the full page background)
+        images = images[1:]
 
-# Cull the words, remove all that overlap with exclude rectangles
-culled_words = filter_words(words, exclude)
+        for image in images:
+            # convert image into to a rectangle
+            x0 = image["x0"]
+            x1 = image["x1"]
+            top = image.get("top", image["y0"])
+            bottom = image.get("bottom", image["y1"])
 
-# the analysis portion
-scenario = dict()
+            r = {
+                "x0": x0,
+                "x1": x1,
+                "top": top,
+                "bottom": bottom
+            }
 
-# Find the header based on the images
-header = find_header(images)
-im.draw_rect(header, stroke="blue", fill=TRANSPARENT, stroke_width=5)
+        for rect in rects:
+            # im.draw_rect(rect, stroke="red", fill=None, stroke_width=5)
+            exclude.append(rect)
 
-# Find the title and reference based on the header position and expected offsets
-title = rect_inside(header, 110, 24, 430, 38)
-reference = rect_inside(header, 35, 22, 70, 38)
-im.draw_rect(title, stroke="red", fill=TRANSPARENT, stroke_width=5)
-im.draw_rect(reference, stroke="red", fill=TRANSPARENT, stroke_width=5)
+        # Cull the words, remove all that overlap with exclude rectangles
+        culled_words = filter_words(words, exclude)
 
-# get the columns based on the header position
-col_separators = [header[0] + 215, header[0] + 210 + 190]
+        # the analysis portion
+        scenario = dict()
 
-second_column = {
-    "x0": col_separators[0],
-    "x1": col_separators[1],
-    "top": 0,
-    "bottom": page_height}
+        # Find the header based on the images
+        header = find_header(images)
+        im.draw_rect(header, stroke="blue", fill=TRANSPARENT, stroke_width=5)
 
-first_column = {
-    "x0": 0,
-    "x1": col_separators[0],
-    "top": 0,
-    "bottom": page_height}
+        # Find the title and reference based on the header position and expected offsets
+        title = rect_inside(header, 110, 24, 430, 38)
+        reference = rect_inside(header, 35, 22, 70, 38)
+        im.draw_rect(title, stroke="red", fill=TRANSPARENT, stroke_width=5)
+        im.draw_rect(reference, stroke="red", fill=TRANSPARENT, stroke_width=5)
 
-third_column = {
-    "x0": col_separators[1],
-    "x1": page_width,
-    "top": 0,
-    "bottom": page_height}
+        # get the columns based on the header position
+        col_separators = [header[0] + 215, header[0] + 210 + 190]
 
-im.draw_rect(first_column, stroke="blue", fill=TRANSPARENT)
-im.draw_rect(second_column, stroke="blue", fill=TRANSPARENT)
-im.draw_rect(third_column, stroke="blue", fill=TRANSPARENT)
+        second_column = {
+            "x0": col_separators[0],
+            "x1": col_separators[1],
+            "top": 0,
+            "bottom": page_height}
 
-scenario["title"] = words_to_text(words_in_bbox(words, title))
-reference = words_in_bbox(words, reference)
+        first_column = {
+            "x0": 0,
+            "x1": col_separators[0],
+            "top": 0,
+            "bottom": page_height}
 
-# reference is two bits of text, a number, a •, and then a code.
-# need a regex to split that into the number and the code
-reference = words_to_text(reference)
+        third_column = {
+            "x0": col_separators[1],
+            "x1": page_width,
+            "top": 0,
+            "bottom": page_height}
 
-match = re.match(r"(\d+)\s*•\s*(\w+)", reference)
-if match:
-    scenario["number"] = match.group(1)
-    scenario["location"] = match.group(2)
+        im.draw_rect(first_column, stroke="blue", fill=TRANSPARENT)
+        im.draw_rect(second_column, stroke="blue", fill=TRANSPARENT)
+        im.draw_rect(third_column, stroke="blue", fill=TRANSPARENT)
 
-# Now, we need to find the scenario "Introduction" text
-# That means find all the headers.
-# First in words find the word "Introduction"
+        scenario["title"] = words_to_text(words_in_bbox(words, title))
+        reference = words_in_bbox(words, reference)
 
-# We will exclude all words that are in the header
-words = filter_words(words, [bbox_to_rect(header)])
+        # reference is two bits of text, a number, a •, and then a code.
+        # need a regex to split that into the number and the code
+        reference = words_to_text(reference)
 
-# Divide it up into headers and paragraphs
-paragraph_words = list()
-header_words = list()
-# find the different font sizes
-for word in words:
-    if word["height"] == 10.0:
-        paragraph_words.append(word)
+        match = re.match(r"(\d+)\s*•\s*(\w+)", reference)
+        if match:
+            scenario["number"] = match.group(1)
+            scenario["location"] = match.group(2)
 
-    if word["height"] == 12.0:
-        header_words.append(word)
+        # Now, we need to find the scenario "Introduction" text
+        # That means find all the headers.
+        # First in words find the word "Introduction"
 
-paragraphs_sections = get_sections(paragraph_words, pil_img)
-draw_sections(paragraphs_sections, im)
-sections_to_draw = []
+        # We will exclude all words that are in the header
+        words = filter_words(words, [bbox_to_rect(header)])
 
-scenario["sections"] = list()
+        # Divide it up into headers and paragraphs
+        paragraph_words = list()
+        header_words = list()
+        # find the different font sizes
+        for word in words:
 
-for paragraph in paragraphs_sections:
-    # get all the text in the paragraph that falls in the first column
-    paragraph_first_col_words = words_in_bbox(paragraph["words"], rect_to_bbox(first_column))
-    paragraph_second_col_words = words_in_bbox(paragraph["words"], rect_to_bbox(second_column))
-    paragraph_third_col_words = words_in_bbox(paragraph["words"], rect_to_bbox(third_column))
+            # check if the woris "Continued" and if so, skip it
+            if word["italic"]:
+                # don't use it, discard.
+                continue
 
-    paragraph["columns"] = list()
+            if word["height"] == 10.0:
+                paragraph_words.append(word)
 
-    if paragraph_first_col_words:
-        column = {
-            "words": paragraph_first_col_words,
-            "bbox": cluster_bbox(paragraph_first_col_words)
-        }
+            if word["height"] == 12.0:
+                header_words.append(word)
 
-        paragraph["columns"].append(column)
-        sections_to_draw.append(cluster_bbox(paragraph_first_col_words))
+        paragraphs_sections = get_sections(paragraph_words, pil_img)
+        draw_sections(paragraphs_sections, im)
+        sections_to_draw = []
 
-    if paragraph_second_col_words:
-        column = {
-            "words": paragraph_second_col_words,
-            "bbox": cluster_bbox(paragraph_second_col_words)
-        }
+        headers = []
+        header_words = merge_words_same_line(header_words)
 
-        paragraph["columns"].append(column)
-        sections_to_draw.append(cluster_bbox(paragraph_second_col_words))
+        scenario["sections"] = list()
 
-    if paragraph_third_col_words:
-        column = {
-            "words": paragraph_third_col_words,
-            "bbox": cluster_bbox(paragraph_third_col_words)
-        }
+        for paragraph in paragraphs_sections:
+            # get all the text in the paragraph that falls in the first column
+            paragraph_first_col_words = words_in_bbox(paragraph["words"], rect_to_bbox(first_column))
+            paragraph_second_col_words = words_in_bbox(paragraph["words"], rect_to_bbox(second_column))
+            paragraph_third_col_words = words_in_bbox(paragraph["words"], rect_to_bbox(third_column))
 
-        paragraph["columns"].append(column)
-        sections_to_draw.append(cluster_bbox(paragraph_third_col_words))
+            paragraph["columns"] = list()
 
-for section in sections_to_draw:
-    im.draw_rect(section, stroke="green", fill=TRANSPARENT, stroke_width=4)
+            if paragraph_first_col_words:
+                column = {
+                    "words": paragraph_first_col_words,
+                    "bbox": cluster_bbox(paragraph_first_col_words)
+                }
 
-headers = []
-header_words = merge_words_same_line(header_words)
+                # check if this section has a header INSIDE it
+                for header in header_words:
+                    header_rect = {
+                        "x0": header["x0"],
+                        "x1": header["x1"],
+                        "top": header["top"],
+                        "bottom": header["bottom"]
+                    }
 
-for word in header_words:
-    print(word["text"], word["top"], word["bottom"])
+                    if rect_contains(cluster_bbox(paragraph_first_col_words), header_rect):
+                        im.draw_rect(header_rect, stroke="purple", fill="purple", stroke_width=4)
+                        print("Found header inside section:", header["text"])
 
-    color = "#{:06x}".format(random.randint(0, 0xFFFFFF))
+                        # This columns needs to be split into two.
+                        # One above the header, one below.
+                        dividing_y = header["top"] + (header["bottom"] - header["top"]) / 2
 
-    im.draw_rect(
-        word,
-        stroke=color,
-        fill=TRANSPARENT,
-        stroke_width=4
-    )
+                        above_header_words = [w for w in paragraph_first_col_words if w["bottom"] <= dividing_y]
+                        below_header_words = [w for w in paragraph_first_col_words if w["top"] >= dividing_y]
 
-    bottom_of_header = word["bottom"]
+                        new_paragraph = {
+                            "words": above_header_words,
+                            "bbox": cluster_bbox(above_header_words)
+                        }
 
-    delta_y = float("inf")
-    candidate = None
+                        paragraph_first_col_words = below_header_words
 
-    for index, paragraph in enumerate(paragraphs_sections):
-        for column in paragraph["columns"]:
-            # # does this column start below the bottom of the header?
-            if column["bbox"]["top"] >= bottom_of_header:
-                # does the column start beyond the farthest right of the header?
-                if not column["bbox"]["x0"] >= word["x1"]:
+                        column = {
+                            "words": below_header_words,
+                            "bbox": cluster_bbox(below_header_words),}
 
-                    # calculate the delta_y
-                    new_delta_y = column["bbox"]["top"] - bottom_of_header
-                    para = words_to_text(column["words"])
-                    print(new_delta_y, bottom_of_header, column["bbox"]["top"], para)
+                        paragraphs_sections.append(new_paragraph)
 
-                    if delta_y > new_delta_y:
-                        delta_y = new_delta_y
-                        candidate = index
+                paragraph["columns"].append(column)
+                sections_to_draw.append(cluster_bbox(paragraph_first_col_words))
 
-    if candidate is not None:
-        # We have a match, and can marry the header to the paragraph
-        section = dict()
-        section["header"] = word["text"]
-        section["text"] = ""
+            if paragraph_second_col_words:
+                column = {
+                    "words": paragraph_second_col_words,
+                    "bbox": cluster_bbox(paragraph_second_col_words)
+                }
 
-        for column in paragraphs_sections[candidate]["columns"]:
-            paragraph_text = words_to_text(column["words"])
-            section["text"] += paragraph_text
+                paragraph["columns"].append(column)
+                sections_to_draw.append(cluster_bbox(paragraph_second_col_words))
 
-        # remove the candidate from the paragraphs_sections so we don't match it again
-        paragraphs_sections.pop(candidate)
+            if paragraph_third_col_words:
+                column = {
+                    "words": paragraph_third_col_words,
+                    "bbox": cluster_bbox(paragraph_third_col_words)
+                }
 
-        scenario["sections"].append(section)
+                paragraph["columns"].append(column)
+                sections_to_draw.append(cluster_bbox(paragraph_third_col_words))
 
-    print()
 
-im.save("blocker.png")
-print("Results in JSON")
-pprint(scenario, width=120)
 
-# save this scenario to a json file
-import json
-filename = "../input/scenarios/" + scenario["number"] + " - " + scenario["title"] + ".json"
+        for section in sections_to_draw:
+            im.draw_rect(section, stroke="green", fill=TRANSPARENT, stroke_width=4)
 
-with open(filename, "w") as f:
-    json.dump(scenario, f, indent=4)
-    f.close()
+            # check if this section has a header INSIDE it
+            for header in header_words:
+                header_rect = {
+                    "x0": header["x0"],
+                    "x1": header["x1"],
+                    "top": header["top"],
+                    "bottom": header["bottom"]
+                }
+
+
+
+        for word in header_words:
+            print(word["text"], word["top"], word["bottom"])
+
+            color = "#{:06x}".format(random.randint(0, 0xFFFFFF))
+
+            im.draw_rect(
+                word,
+                stroke=color,
+                fill=TRANSPARENT,
+                stroke_width=4
+            )
+
+            bottom_of_header = word["bottom"]
+
+            delta_y = float("inf")
+            candidate = None
+
+            for index, paragraph in enumerate(paragraphs_sections):
+                for column in paragraph["columns"]:
+                    # # does this column start below the bottom of the header?
+                    if column["bbox"]["top"] >= bottom_of_header:
+                        # does the column start beyond the farthest right of the header?
+                        if not column["bbox"]["x0"] >= word["x1"]:
+
+                            # does the column end before the farthest left of the header?
+                            if not column["bbox"]["x1"] <= word["x0"]:
+                                # calculate the delta_y
+                                new_delta_y = column["bbox"]["top"] - bottom_of_header
+                                para = words_to_text(column["words"])
+                                # print(new_delta_y, bottom_of_header, column["bbox"]["top"], para)
+
+                                if delta_y > new_delta_y:
+                                    delta_y = new_delta_y
+                                    candidate = index
+
+            if candidate is not None:
+                # We have a match, and can marry the header to the paragraph
+                section = dict()
+                section["header"] = word["text"]
+                section["text"] = ""
+
+                for column in paragraphs_sections[candidate]["columns"]:
+                    paragraph_text = words_to_text(column["words"])
+                    section["text"] += paragraph_text
+
+                # remove the candidate from the paragraphs_sections so we don't match it again
+                paragraphs_sections.pop(candidate)
+
+                scenario["sections"].append(section)
+
+        im.save("blocker.png")
+
+        # save this scenario to a json file
+        import json
+        filename = "../input/scenarios/" + scenario["number"] + " - " + scenario["title"] + ".json"
+
+        with open(filename, "w") as f:
+            json.dump(scenario, f, indent=4)
+            f.close()
+
+    except Exception as e:
+        print("Error processing file:", entry)
+        print(e)

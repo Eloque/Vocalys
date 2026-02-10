@@ -1,5 +1,4 @@
 import random
-from pprint import pprint
 
 import re
 import numpy as np
@@ -35,7 +34,6 @@ def words_with_style(page, words):
 		})
 
 	return styled
-
 
 def bbox_to_rect(b):
     return {"x0": b[0], "top": b[1], "x1": b[2], "bottom": b[3]}
@@ -245,7 +243,7 @@ def find_header(images, expected_height=91.68):
 
     return best  # (x0, top, x1, bottom) or None
 
-def get_scenerario(words, header):
+def get_scenario(words, header):
     title_rect = rect_inside(header, 110, 24, 430, 38)
     reference_rect = rect_inside(header, 35, 22, 70, 38)
 
@@ -256,6 +254,7 @@ def get_scenerario(words, header):
     reference_text = words_to_text(reference_words)
 
     return title_text, reference_text
+# End function specifically for Frosthaven scenario book
 
 # get a list of all the files in the input directory
 import os
@@ -263,17 +262,19 @@ input_files = [f for f in os.listdir("input") if os.path.isfile(os.path.join("in
 print("Input files:", input_files)
 
 for entry in input_files:
-
-    if entry != "page_007.pdf":
-        continue
-
-    # End function specifically for Frosthaven scenario book
     pdf = pdfplumber.open(f"input/{entry}")  # See note below
     print("Processing file:", entry)
+
+for page in pdf.pages:
+
     try:
-        page = pdf.pages[0]
+        # First get some basic data, load the page
+        # Retrieve an image and save it.
+        # page = pdf.pages[0]
         im = page.to_image(72)
         pil_img = im.original
+
+        pil_img.save(f"output/processing.png")
 
         # get the width of the page
         page_width = page.width
@@ -289,7 +290,7 @@ for entry in input_files:
         words = words_with_style(page, words)
 
         # remove the first image (it's the full page background)
-        images = images[1:]
+        # images = images[1:]
 
         for image in images:
             # convert image into to a rectangle
@@ -304,6 +305,16 @@ for entry in input_files:
                 "top": top,
                 "bottom": bottom
             }
+
+            im.draw_rect(r, stroke="blue", fill=TRANSPARENT, stroke_width=5)
+
+        # Need to find out if this page is a regular scenario page or not.
+        # This is done by finding the header
+        # Find the header based on the images
+        header = find_header(images)
+        im.draw_rect(header, stroke="black", fill=TRANSPARENT, stroke_width=15)
+
+        im.save("blocker.png")
 
         for rect in rects:
             # im.draw_rect(rect, stroke="red", fill=None, stroke_width=5)

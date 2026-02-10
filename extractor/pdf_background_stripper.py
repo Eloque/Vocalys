@@ -68,9 +68,9 @@ def add_background_color(writer, page, page_width, page_height, rgb=(0, 1, 0)):
 			contents = ArrayObject(list(contents) if isinstance(contents, list) else [contents])
 		page[NameObject("/Contents")] = ArrayObject([bg_ref, *contents])
 
-reader = PdfReader("fh-scenario-book-2-21.pdf")
+reader = PdfReader("input/fh-scenario-book-2-21.pdf")
 
-
+writer = PdfWriter()
 for i, page in enumerate(reader.pages):
 	media_box = page.mediabox
 	page_width = float(media_box.width)
@@ -80,9 +80,10 @@ for i, page in enumerate(reader.pages):
 	strip_backgrounds(resources, page_width, page_height)
 	strip_background_annots(page)
 
-
-	writer = PdfWriter()
 	writer.add_page(page)
 
-	with open(f"page_{i+1:03}.pdf", "wb") as f:
-		writer.write(f)
+	# with open(f"page_{i+1:03}.pdf", "wb") as f:
+	# 	writer.write(f)
+
+with open(f"input/book.pdf", "wb") as f:
+	writer.write(f)

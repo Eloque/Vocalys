@@ -4,8 +4,14 @@ import re
 import numpy as np
 import pdfplumber
 from skimage.color import rgb2lab
+from enum import Enum, auto
 
 TRANSPARENT = (0, 0, 0, 0)
+
+class PageType(Enum):
+	TITLE = auto()
+	SCENARIO = auto()
+	UNKNOWN = auto()
 
 def words_with_style(page, words):
 	styled = []
@@ -241,7 +247,22 @@ def find_header(images, expected_height=91.68):
             best_hdiff = hdiff
             best = (x0, top, x1, bottom)
 
-    return best  # (x0, top, x1, bottom) or None
+    # Determine the page type, by the header height
+    # Okay we need magic numbers here
+    title_page_header_height = 113.07
+    scenario_page_header_height = 91.68
+
+    type = PageType.UNKNOWN
+
+    # Check if it's close, within 1 point of the heights above
+    if abs((best[3] - best[1]) - title_page_header_height) < 1.0:
+        type = PageType.TITLE
+    elif abs((best[3] - best[1]) - scenario_page_header_height) < 1.0:
+        type = PageType.SCENARIO
+    else:
+        type = PageType.UNKNOWN
+
+    return type, best  # (x0, top, x1, bottom) or None
 
 def get_scenario(words, header):
     title_rect = rect_inside(header, 110, 24, 430, 38)
@@ -311,8 +332,27 @@ for page in pdf.pages:
         # Need to find out if this page is a regular scenario page or not.
         # This is done by finding the header
         # Find the header based on the images
-        header = find_header(images)
+        page_type, header = find_header(images)
         im.draw_rect(header, stroke="black", fill=TRANSPARENT, stroke_width=15)
+
+        match page_type:
+            case PageType.TITLE:
+                # first, find the title.
+                # It's is the text in center of the header
+                center_x = (header[0] + header[2]) / 2
+                width = header[2] - header[0] - 60
+
+                title = rect_inside(header, 60/2, 28, width, 38)
+
+                title_text = words_in_bbox(words, title)
+                title_text = words_to_text(title_text)
+                print("Title page detected, title:", title_text)
+                im.draw_rect(title, stroke="red", fill=TRANSPARENT, stroke_width=5)
+
+            case PageType.SCENARIO:
+                pass
+            case PageType.UNKNOWN:
+                pass
 
         im.save("blocker.png")
 
@@ -325,10 +365,6 @@ for page in pdf.pages:
 
         # the analysis portion
         scenario = dict()
-
-        # Find the header based on the images
-        header = find_header(images)
-        im.draw_rect(header, stroke="blue", fill=TRANSPARENT, stroke_width=5)
 
         # Find the title and reference based on the header position and expected offsets
         title = rect_inside(header, 110, 24, 430, 38)

@@ -308,6 +308,9 @@ for page in pdf.pages:
 
         exclude = []
 
+        printable_words = [w for w in words if w["text"].strip()]
+        print(words_to_text(printable_words))
+
         words = words_with_style(page, words)
 
         # remove the first image (it's the full page background)
@@ -320,23 +323,28 @@ for page in pdf.pages:
             top = image.get("top", image["y0"])
             bottom = image.get("bottom", image["y1"])
 
-            r = {
-                "x0": x0,
-                "x1": x1,
-                "top": top,
-                "bottom": bottom
-            }
-
-            im.draw_rect(r, stroke="blue", fill=TRANSPARENT, stroke_width=5)
+            # r = {
+            #     "x0": x0,
+            #     "x1": x1,
+            #     "top": top,
+            #     "bottom": bottom
+            # }
+            #
+            # im.draw_rect(r, stroke="blue", fill=TRANSPARENT, stroke_width=5)
 
         # Need to find out if this page is a regular scenario page or not.
         # This is done by finding the header
         # Find the header based on the images
         page_type, header = find_header(images)
-        im.draw_rect(header, stroke="black", fill=TRANSPARENT, stroke_width=15)
+        im.draw_rect(header, stroke="black", fill=TRANSPARENT, stroke_width=2)
 
         match page_type:
             case PageType.TITLE:
+
+                # the analysis portion
+                scenario = dict()
+                scenario["sections"] = list()
+
                 # first, find the title.
                 # It's is the text in center of the header
                 center_x = (header[0] + header[2]) / 2
@@ -344,24 +352,114 @@ for page in pdf.pages:
 
                 title = rect_inside(header, 60/2, 28, width, 38)
 
-                title_text = words_in_bbox(words, title)
-                title_text = words_to_text(title_text)
-                print("Title page detected, title:", title_text)
+                title_words = words_in_bbox(words, title)
+                title_text = words_to_text(title_words)
                 im.draw_rect(title, stroke="red", fill=TRANSPARENT, stroke_width=5)
+
+                # Divide it up into headers and paragraphs
+                paragraph_words = list()
+                header_words = list()
+                # find the different font sizes
+                for word in words:
+
+                    # check if the word is "Continued" and if so, skip it
+                    if word["italic"]:
+                        # don't use it, discard.
+                        continue
+
+                    if word["height"] == 37.56820000000005 or word["height"] == 12.0 or word["height"] == 10.0:
+                        paragraph_words.append(word)
+
+                    if word["height"] == 12.0 or word["height"] == 24.0:
+                        # this might be a header, but on the title page,
+                        # we need to check the background color, since the text is also in size 12
+                        word_color = word_background_color(word, im.original)
+                        if word_color != (255, 255, 255):
+                            header_words.append(word)
+
+                paragraphs_sections = get_sections(paragraph_words, pil_img)
+                # this page doesn't have columns
+                for paragraph in paragraphs_sections:
+                    paragraph["columns"] = list()
+                    column = {
+                        "words": paragraph["words"],
+                        "bbox": cluster_bbox(paragraph["words"])
+                    }
+
+                    paragraph["columns"].append(column)
+
+                header_words = merge_words_same_line(header_words)
+
+                # append the title to the header words
+                # header_words.append(title_words)
+
+                header_sections = get_sections(header_words, pil_img)
+                draw_sections(header_sections, im)
+
+                ##
+                for word in header_words:
+                    color = "#{:06x}".format(random.randint(0, 0xFFFFFF))
+                    im.draw_rect(
+                        word,
+                        stroke=color,
+                        fill=TRANSPARENT,
+                        stroke_width=4
+                    )
+
+                    bottom_of_header = word["bottom"]
+
+                    delta_y = float("inf")
+                    candidate = None
+
+                    for index, paragraph in enumerate(paragraphs_sections):
+                        for column in paragraph["columns"]:
+                            # # does this column start below the bottom of the header?
+                            if column["bbox"]["top"] >= bottom_of_header:
+                                # does the column start beyond the farthest right of the header?
+                                if not column["bbox"]["x0"] >= word["x1"]:
+
+                                    # does the column end before the farthest left of the header?
+                                    if not column["bbox"]["x1"] <= word["x0"]:
+                                        # calculate the delta_y
+                                        new_delta_y = column["bbox"]["top"] - bottom_of_header
+                                        para = words_to_text(column["words"])
+                                        # print(new_delta_y, bottom_of_header, column["bbox"]["top"], para)
+
+                                        if delta_y > new_delta_y:
+                                            delta_y = new_delta_y
+                                            candidate = index
+
+                    if candidate is not None:
+                        # We have a match, and can marry the header to the paragraph
+                        section = dict()
+                        section["header"] = word["text"]
+                        section["text"] = ""
+
+                        for column in paragraphs_sections[candidate]["columns"]:
+                            paragraph_text = words_to_text(column["words"])
+                            section["text"] += paragraph_text
+
+                        # remove the candidate from the paragraphs_sections so we don't match it again
+                        paragraphs_sections.pop(candidate)
+
+                        scenario["sections"].append(section)
+                ##
 
             case PageType.SCENARIO:
                 pass
             case PageType.UNKNOWN:
                 pass
 
-        im.save("blocker.png")
+
 
         for rect in rects:
-            # im.draw_rect(rect, stroke="red", fill=None, stroke_width=5)
+            im.draw_rect(rect, stroke="red", fill=None, stroke_width=5)
             exclude.append(rect)
 
         # Cull the words, remove all that overlap with exclude rectangles
         culled_words = filter_words(words, exclude)
+
+        im.save("blocker.png")
 
         # the analysis portion
         scenario = dict()

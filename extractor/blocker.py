@@ -257,7 +257,7 @@ def split_paragraphs_into_columns(paragraphs_sections, column_list, header_words
                 }
 
                 if rect_contains(cluster_bbox(paragraph_col_words), header_rect):
-                    print("Found header inside column:", header["text"])
+                    # print("Found header inside column:", header["text"])
 
                     dividing_y = header["top"] + (header["bottom"] - header["top"]) / 2
 
@@ -303,11 +303,11 @@ def split_paragraphs_into_columns(paragraphs_sections, column_list, header_words
                     )
 
                     if header_above_column:
-                        print("Found header above column:", header["text"])
+                        # print("Found header above column:", header["text"])
                         distance = check_bbox["top"] - header_rect["bottom"]
 
                         if abs(distance - 6.668) <= 0.1:
-                            print("distance is within tolerance, column is it's own paragraph")
+                            # print("distance is within tolerance, column is it's own paragraph")
                             paragraphs_sections.append({
                                 "words": paragraph_col_words,
                                 "bbox": check_bbox,
@@ -371,7 +371,8 @@ def marry_headers_to_paragraphs(header_words, paragraphs_sections, debug=False):
             }
 
             for column in paragraphs_sections[candidate].get("columns", []):
-                section["text"] += words_to_text(column["words"])
+                section["text"] += " " + words_to_text(column["words"])
+
 
             # remove the candidate so we don't match it again
             paragraphs_sections.pop(candidate)
@@ -417,7 +418,7 @@ def draw_sections(sections, target_img):
 
         target_img.draw_rect(
             bbox,
-            stroke="black",
+            stroke=color,
             fill=TRANSPARENT,
             stroke_width=1
         )
@@ -445,6 +446,7 @@ def filter_words(words, exclude_rects):
 
 def words_to_text(words):
     return " ".join(w["text"] for w in words)
+
 
 # Functions specifically for Frosthaven scenario book
 def find_header(images, expected_height=91.68):
@@ -570,12 +572,10 @@ for page_number, page in enumerate(pdf.pages[page_offset:]):
         im.draw_rect(header, stroke="black", fill=TRANSPARENT, stroke_width=2)
 
         # the analysis portion
-        if page_type != PageType.UNKNOWN:
-            entry = dict()
-            entry["sections"] = list()
-            entry["type"] = page_type.name
-        else:
-            pass
+        # if page_type != PageType.UNKNOWN:
+        entry = dict()
+        entry["sections"] = list()
+        entry["type"] = page_type.name
 
         match page_type:
             case PageType.TITLE:
@@ -665,7 +665,7 @@ for page_number, page in enumerate(pdf.pages[page_offset:]):
 
                         for column in paragraphs_sections[candidate]["columns"]:
                             paragraph_text = words_to_text(column["words"])
-                            section["text"] += paragraph_text
+                            section["text"] += " " + paragraph_text
 
                         # remove the candidate from the paragraphs_sections so we don't match it again
                         paragraphs_sections.pop(candidate)
@@ -700,11 +700,11 @@ for page_number, page in enumerate(pdf.pages[page_offset:]):
 
                 # we also need a page offset of 5 for even pages
                 if page_number % 2 == 0:
-                    page_offset = 5
+                    column_offset = 5
                 else:
-                    page_offset = 0
+                    column_offset = 0
 
-                col_separators = [header[0] + 215 + page_offset, header[0] + 215 + page_offset + 190]
+                col_separators = [header[0] + 215 + column_offset, header[0] + 215 + column_offset + 190]
 
                 # x boundaries from left edge -> separators -> right edge
                 x_edges = [0, *col_separators, page.width]
@@ -743,54 +743,12 @@ for page_number, page in enumerate(pdf.pages[page_offset:]):
                     header_words,
                 )
 
-                for paragraph in paragraphs_sections:
-                    for column in paragraph["columns"]:
-                        im.draw_rect(column["bbox"], stroke="black", fill=TRANSPARENT, stroke_width=1)
-
                 headers = []
                 # entry["sections"] = list()
 
                 # Now go through the headers and match them
                 # with the appropiate paragraph
-                entry["sections"] = marry_headers_to_paragraphs(header_words, paragraphs_sections, debug=True)
-                # for word in header_words:
-                #
-                #     bottom_of_header = word["bottom"]
-                #
-                #     delta_y = float("inf")
-                #     candidate = None
-                #
-                #     for index, paragraph in enumerate(paragraphs_sections):
-                #         for column in paragraph["columns"]:
-                #             # # does this column start below the bottom of the header?
-                #             if column["bbox"]["top"] >= bottom_of_header:
-                #                 # does the column start beyond the farthest right of the header?
-                #                 if not column["bbox"]["x0"] >= word["x1"]:
-                #
-                #                     # does the column end before the farthest left of the header?
-                #                     if not column["bbox"]["x1"] <= word["x0"]:
-                #                         # calculate the delta_y
-                #                         new_delta_y = column["bbox"]["top"] - bottom_of_header
-                #                         para = words_to_text(column["words"])
-                #
-                #                         if delta_y > new_delta_y:
-                #                             delta_y = new_delta_y
-                #                             candidate = index
-                #
-                #     if candidate is not None:
-                #         # We have a match, and can marry the header to the paragraph
-                #         section = dict()
-                #         section["header"] = word["text"]
-                #         section["text"] = ""
-                #
-                #         for column in paragraphs_sections[candidate]["columns"]:
-                #             paragraph_text = words_to_text(column["words"])
-                #             section["text"] += paragraph_text
-                #
-                #         # remove the candidate from the paragraphs_sections so we don't match it again
-                #         paragraphs_sections.pop(candidate)
-                #
-                #         entry["sections"].append(section)
+                entry["sections"] = marry_headers_to_paragraphs(header_words, paragraphs_sections, debug=False)
 
                 book.append(entry)
                 im.save("blocker.png")
@@ -802,6 +760,8 @@ for page_number, page in enumerate(pdf.pages[page_offset:]):
 
                 # New Entry
                 entry = dict()
+                # The type should be set to scenario, since it's a continuation of the scenario
+                entry["type"] = PageType.SCENARIO.name
 
                 # Book is list, remove the last item, we are replacing it with the combined page analysis
                 book.pop()
@@ -863,11 +823,12 @@ for page_number, page in enumerate(pdf.pages[page_offset:]):
                     entry["number"] = match.group(1)
                     entry["location"] = match.group(2)
 
-                im.save("blocker.png")
-
                 # We will exclude all words that are in the headers
                 combined_words = filter_words(combined_words, [bbox_to_rect(header)])
                 combined_words = filter_words(combined_words, [bbox_to_rect(second_page_header)])
+
+                # Remove the phrase "Continued on next page" if it exists
+                combined_words = remove_phrase(combined_words, ["–", "Continued", "on", "next", "page."])
 
                 # Split the words into headers and paragraphs
                 paragraph_words, header_words = get_headers_paragraphs(combined_words)
@@ -877,11 +838,9 @@ for page_number, page in enumerate(pdf.pages[page_offset:]):
                 # Remove the header words that are 2 characters long, starting with 'x'
                 header_words = [w for w in header_words if not (len(w["text"]) == 2 and w["text"].startswith("x"))]
 
-                # Remove the phrase "Continued on next page" if it exists
-                paragraph_words = remove_phrase(paragraph_words, ["Continued", "on", "next", "page."])
-
                 # Get sections for the paragraphs
                 paragraphs_sections = get_sections(paragraph_words, combined_image)
+                draw_sections(paragraphs_sections, im)
 
                 # Determine the columns separators based on the header position and expected offsets
                 col_separators = [header[0] + 215,
@@ -903,9 +862,6 @@ for page_number, page in enumerate(pdf.pages[page_offset:]):
                     for i in range(len(x_edges) - 1)
                 ]
 
-                for col in column_list:
-                    im.draw_rect(col, stroke="blue", fill=TRANSPARENT, stroke_width=1)
-
                 # Divide the paragraphs into columns, account for headers
                 paragraphs_sections = split_paragraphs_into_columns(
                     paragraphs_sections,
@@ -913,58 +869,12 @@ for page_number, page in enumerate(pdf.pages[page_offset:]):
                     header_words,
                 )
 
-                for paragraph in paragraphs_sections:
-                    for column in paragraph["columns"]:
-                        im.draw_rect(column["bbox"], stroke="green", fill=TRANSPARENT, stroke_width=2)
+                # Now go through the headers and match them
+                # with the appropriate paragraph
+                entry["sections"] = marry_headers_to_paragraphs(header_words, paragraphs_sections)
 
                 im.save("blocker.png")
-
-                ##
-
-                entry["sections"] = list()
-
-                # Now go through the headers and match them
-                # with the appropiate paragraph
-                for word in header_words:
-                    bottom_of_header = word["bottom"]
-
-                    delta_y = float("inf")
-                    candidate = None
-
-                    for index, paragraph in enumerate(paragraphs_sections):
-                        for column in paragraph["columns"]:
-                            # # does this column start below the bottom of the header?
-                            if column["bbox"]["top"] >= bottom_of_header:
-                                # does the column start beyond the farthest right of the header?
-                                if not column["bbox"]["x0"] >= word["x1"]:
-
-                                    # does the column end before the farthest left of the header?
-                                    if not column["bbox"]["x1"] <= word["x0"]:
-                                        # calculate the delta_y
-                                        new_delta_y = column["bbox"]["top"] - bottom_of_header
-                                        para = words_to_text(column["words"])
-
-                                        if delta_y > new_delta_y:
-                                            delta_y = new_delta_y
-                                            candidate = index
-
-                    if candidate is not None:
-                        # We have a match, and can marry the header to the paragraph
-                        section = dict()
-                        section["header"] = word["text"]
-                        section["text"] = ""
-
-                        for column in paragraphs_sections[candidate]["columns"]:
-                            paragraph_text = words_to_text(column["words"])
-                            section["text"] += paragraph_text
-
-                        # remove the candidate from the paragraphs_sections so we don't match it again
-                        paragraphs_sections.pop(candidate)
-
-                        entry["sections"].append(section)
-                ##
                 book.append(entry)
-
 
             case PageType.UNKNOWN:
                 pass

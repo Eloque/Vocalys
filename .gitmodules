@@ -1,0 +1,3 @@
+[submodule "faster-higgs-audio"]
+	path = faster-higgs-audio
+	url = https://github.com/sorbetstudio/faster-higgs-audio.git

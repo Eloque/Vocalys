@@ -1,3 +1,5 @@
+import os
+
 from pypdf import PdfReader, PdfWriter
 from pypdf.generic import NameObject, DictionaryObject, DecodedStreamObject
 
@@ -68,22 +70,30 @@ def add_background_color(writer, page, page_width, page_height, rgb=(0, 1, 0)):
 			contents = ArrayObject(list(contents) if isinstance(contents, list) else [contents])
 		page[NameObject("/Contents")] = ArrayObject([bg_ref, *contents])
 
-reader = PdfReader("input/fh-scenario-book-2-21.pdf")
 
-writer = PdfWriter()
-for i, page in enumerate(reader.pages):
-	media_box = page.mediabox
-	page_width = float(media_box.width)
-	page_height = float(media_box.height)
+# find all the files in the input/books folder that match the pattern "fh-scenario-book-*.pdf"
+input_folder = "../input/books"
+input_books = [f for f in os.listdir(input_folder) if f.startswith("fh-scenario-book-") and f.endswith(".pdf")]
 
-	resources = page.get("/Resources")
-	strip_backgrounds(resources, page_width, page_height)
-	strip_background_annots(page)
+for book in input_books:
 
-	writer.add_page(page)
+	reader = PdfReader(os.path.join(input_folder, book))
 
-	# with open(f"page_{i+1:03}.pdf", "wb") as f:
-	# 	writer.write(f)
+	writer = PdfWriter()
+	for i, page in enumerate(reader.pages):
+		media_box = page.mediabox
+		page_width = float(media_box.width)
+		page_height = float(media_box.height)
 
-with open(f"input/book.pdf", "wb") as f:
-	writer.write(f)
+		resources = page.get("/Resources")
+		strip_backgrounds(resources, page_width, page_height)
+		strip_background_annots(page)
+
+		writer.add_page(page)
+
+		# with open(f"page_{i+1:03}.pdf", "wb") as f:
+		# 	writer.write(f)
+
+	output_filename = book.replace("fh-scenario-book-", "stripped-scenario-book-")
+	with open(os.path.join(input_folder, output_filename), "wb") as f:
+		writer.write(f)

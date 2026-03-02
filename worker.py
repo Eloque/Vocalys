@@ -25,17 +25,7 @@ def synthesize_audio(model_client, tokenizer, text, voice_sample, filename):
         voice_sample = None
 
     chunked_text = chunker.chunk_text(text)
-
     style = voice_sample["style"]
-
-    # style = (
-    #     "You are a deep, sonorous narrator. "
-    #     "Voice is cold, restrained, heavy with foreboding. "
-    #     "Pause before key revelations. "
-    #     "Emphasize important words strongly. "
-    #     "Intensity rises on threats and stakes. "
-    #     "Keep pacing deliberate."
-    # )
 
     messages, audio_ids = prepare_generation_context(
         scene_prompt=style,
@@ -45,20 +35,9 @@ def synthesize_audio(model_client, tokenizer, text, voice_sample, filename):
         speaker_tags=[],
     )
 
-    # was .65
-    temperature = 0.75
-    top_k = 80
-    top_p = 0.97
-    ras_win_len = 4 + 20
-    ras_win_max_num_repeat = 3 + 1
-    generation_chunk_buffer_size = 2
-
-    temperature = 0.75
-    top_k = 70
-    top_p = 0.95
     ras_win_len = 32
     ras_win_max_num_repeat = 4
-    generation_chunk_buffer_size = 1
+    generation_chunk_buffer_size = 3
 
     temperature = voice_sample["temperature"]
     top_k = voice_sample["top_k"]
@@ -86,55 +65,76 @@ def main():
     sync_voice_prompts()
     model_client, tokenizer = initialize_synthesization()
 
-    voices = ["victor", "librarian", "sherlock", "slayer",
-              "first", "en_man", "en_woman", "broom_salesman",
-              "belinda", "morgan", "wick"]
-
-    voices = ["victor", "first", "librarian"]
-
-    voices = []
-
     style = (
-        "Narrate with controlled intensity."
-        "Maintain steady pacing."
-        "When a sentence is short and declarative, slow slightly and add weight."
+        "Narrate with controlled intensity. "
+        "Maintain steady pacing, but accelerate during action sequences. "
+        "When a sentence is short and declarative, slow slightly and add weight. "
         "Pause briefly before final decisive statements. "
-        "Avoid neutral tone on climactic lines."
+        "Avoid neutral tone on climactic lines. "
     )
 
-    voice = { "name": "fred",
+    first = { "name": "first",
               "temperature": 0.70,
               "top_k": 60,
               "top_p": 0.95,
               "style": style}
 
-    voices.append(voice)
-
     style = (
-        "Narrate with controlled intensity."
-        "Maintain steady pacing."
-        "When a sentence is short and declarative, slow slightly and add weight."
+        "Narrate with controlled intensity. "
+        "Maintain steady pacing, but accelerate during action sequences. "
+        "When a sentence is short and declarative, slow slightly and add weight. "
         "Pause briefly before final decisive statements. "
-        "Avoid neutral tone on climactic lines."
+        "Avoid neutral tone on climactic lines. "
     )
 
-    voice = { "name": "victor",
-              "temperature": 0.85,
-              "top_k": 80,
+    fred = { "name": "fred",
+              "temperature": 0.70,
+              "top_k": 60,
               "top_p": 0.95,
               "style": style}
 
-    # voices.append(voice)
+    style = (
+        "Narrate with controlled intensity. "
+        "Maintain steady pacing, but accelerate during action sequences. "
+        "When a sentence is short and declarative, slow slightly and add weight. "
+        "Pause briefly before final decisive statements. "
+        "Avoid neutral tone on climactic lines. "
+    )
+
+    victor = { "name": "victor",
+               "temperature": 0.85,
+               "top_k": 80,
+               "top_p": 0.95,
+               "style": style}
+
+    style = (
+        "You are a solemn battle psyker. "
+        "Voice is deep, resonant, and controlled. "
+        "Speak slowly with deliberate authority. "
+        "Emotion is restrained but powerful beneath the surface. "
+        "Emphasize key words with weight, not volume. "
+        "Pause slightly before decisive statements. "
+        "Never sound hurried. "
+        "Let declarations feel inevitable. "
+    )
+
+    librarian = { "name": "librarian",
+                  "temperature": 0.68,
+                  "top_k": 55,
+                  "top_p": 0.92,
+                  "style": style}
 
     input_file = "./input/scenarios/book.json"
     book = json.load(open(input_file))
+
+    voices = [librarian, fred, victor, first]
 
     # check if the output folder exists, if not create it
     output_folder = "./output"
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
-    for entry in book[1:]:
+    for entry in [book[0]] + book[11:]:
 
         try:
 
@@ -210,7 +210,7 @@ def main():
                             filename = f"{clip['header']}.wav"
                             filename = os.path.join(voice_folder, filename)
 
-                            #synthesize_audio(model_client, tokenizer, clip["text"], voice, filename)
+                            synthesize_audio(model_client, tokenizer, clip["text"], voice, filename)
 
                             clip["audio"][voice["name"]] = f"{voice['name']}/{clip['header']}.wav"
 

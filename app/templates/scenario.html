@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width,initial-scale=1">
+	<title>{{ manifest.scenario.number }} - {{ manifest.scenario.title }}</title>
+</head>
+<body>
+	<a href="/">Back</a>
+
+	<h1>{{ manifest.scenario.number }} - {{ manifest.scenario.title }}</h1>
+
+	<label for="voice">Voice</label><br>
+	<select id="voice">
+		{% for v in manifest.clips[0].audio_urls.keys() %}
+			<option value="{{ v }}">{{ v }}</option>
+		{% endfor %}
+	</select>
+
+	<h2>Clips</h2>
+
+	<audio id="player" controls preload="none"></audio>
+
+	<div id="clips">
+		{% for clip in manifest.clips %}
+			<button
+				type="button"
+				style="display:block;margin:8px 0"
+				data-header="{{ clip.header }}"
+				{% for voice, url in clip.audio_urls.items() %}
+					data-{{ voice }}="{{ url }}"
+				{% endfor %}
+			>{{ clip.header }}</button>
+		{% endfor %}
+	</div>
+
+	<script>
+		const player = document.getElementById("player");
+		const voiceSelect = document.getElementById("voice");
+
+		function playFromButton(btn) {
+			const voice = voiceSelect.value;
+			const url = btn.dataset[voice];
+			if (!url) return;
+			player.src = url;
+			player.play();
+		}
+
+		document.getElementById("clips").addEventListener("click", (e) => {
+			if (e.target.tagName === "BUTTON") {
+				playFromButton(e.target);
+			}
+		});
+	</script>
+</body>
+</html>

@@ -2,6 +2,7 @@
 import json
 import os
 
+
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True,max_split_size_mb:128"
 
 from enum import Enum, auto
@@ -20,6 +21,13 @@ class PageType(Enum):
     UNKNOWN = auto()
 
 def synthesize_audio(model_client, tokenizer, text, voice_sample, filename):
+
+    print("Synthesizing audio for:", voice_sample["name"])
+
+    # check if the files already exists, if it does, skip the synthesis
+    if os.path.exists(filename):
+        print(f"File {filename} already exists, skipping synthesis.")
+        return
 
     if voice_sample == "None":
         voice_sample = None
@@ -134,7 +142,7 @@ def main():
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
-    for entry in [book[0]] + book[11:]:
+    for entry in book[:]:
 
         try:
 

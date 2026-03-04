@@ -20,52 +20,68 @@ class PageType(Enum):
     CONTINUED_SCENARIO = auto()
     UNKNOWN = auto()
 
-def synthesize_audio(model_client, tokenizer, text, voice_sample, filename):
-
-    print("Synthesizing audio for:", voice_sample["name"])
+def synthesize_audio(model_client, tokenizer, text, voice_sample, filename, max_chunk_size=120):
 
     # check if the files already exists, if it does, skip the synthesis
     if os.path.exists(filename):
-        print(f"File {filename} already exists, skipping synthesis.")
+        # print(f"File {filename} already exists, skipping synthesis.")
         return
 
     if voice_sample == "None":
         voice_sample = None
 
-    chunked_text = chunker.chunk_text(text)
-    style = voice_sample["style"]
+    print(f"File {filename} does not exist, missing {voice_sample['name']} voice sample, synthesizing...")
 
-    messages, audio_ids = prepare_generation_context(
-        scene_prompt=style,
-        ref_audio=voice_sample["name"],
-        ref_audio_in_system_message=True,
-        audio_tokenizer=tokenizer,
-        speaker_tags=[],
-    )
+    try:
+        chunked_text = chunker.chunk_text(text, max_chunk_size)
+        style = voice_sample["style"]
 
-    ras_win_len = 32
-    ras_win_max_num_repeat = 4
-    generation_chunk_buffer_size = 3
+        messages, audio_ids = prepare_generation_context(
+            scene_prompt=style,
+            ref_audio=voice_sample["name"],
+            ref_audio_in_system_message=True,
+            audio_tokenizer=tokenizer,
+            speaker_tags=[],
+        )
 
-    temperature = voice_sample["temperature"]
-    top_k = voice_sample["top_k"]
-    top_p = voice_sample["top_p"]
+        ras_win_len = 32
+        ras_win_max_num_repeat = 4
+        generation_chunk_buffer_size = 3
 
-    concat_wv, sr, text_output = model_client.generate(
-        messages=messages,
-        audio_ids=audio_ids,
-        chunked_text=chunked_text,
-        generation_chunk_buffer_size=generation_chunk_buffer_size,
-        temperature=temperature,
-        top_k=top_k,
-        top_p=top_p,
-        ras_win_len=ras_win_len,
-        ras_win_max_num_repeat=ras_win_max_num_repeat,
-        seed=1001,
-    )
+        temperature = voice_sample["temperature"]
+        top_k = voice_sample["top_k"]
+        top_p = voice_sample["top_p"]
 
-    sf.write(filename, concat_wv, sr)
-    torch.cuda.empty_cache()
+        concat_wv, sr, text_output = model_client.generate(
+            messages=messages,
+            audio_ids=audio_ids,
+            chunked_text=chunked_text,
+            generation_chunk_buffer_size=generation_chunk_buffer_size,
+            temperature=temperature,
+            top_k=top_k,
+            top_p=top_p,
+            ras_win_len=ras_win_len,
+            ras_win_max_num_repeat=ras_win_max_num_repeat,
+            seed=1001,
+        )
+
+        sf.write(filename, concat_wv, sr)
+        torch.cuda.empty_cache()
+
+    except torch.OutOfMemoryError as e:
+        print(f"Error synthesizing audio for {filename}")
+
+        if max_chunk_size > 40:
+
+            print(f"Retrying with smaller chunk size: {max_chunk_size - 20}")
+            return synthesize_audio(model_client, tokenizer, text, voice_sample, filename, max_chunk_size - 20)
+
+        else:
+
+            print(f"Error synthesizing audio for {filename}: {e}, no chunk size left, skipping.")
+
+    except Exception as e:
+        print(f"Error synthesizing audio for {filename}: {e}, no retry, skipping.")
 
 def main():
 

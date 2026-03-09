@@ -67,8 +67,8 @@ def chunk_text(text, max_chunk_size=120):
 
     sentences = re.split(r'(?:(?<=[.!?])|(?<=[.!?]["\”’]))\s+(?=[A-Z"“])', text)
 
-    for sentence in sentences:
-        print(sentence)
+#    for sentence in sentences:
+#        print(sentence)
 
     chunks = []
     current_chunk = ""
@@ -86,8 +86,8 @@ def chunk_text(text, max_chunk_size=120):
     if current_chunk:
         chunks.append(current_chunk.strip())
 
-    for chunk in chunks:
-        print(f"Chunk ({len(chunk)} chars): {chunk[:120+120]}")
+#    for chunk in chunks:
+#        print(f"Chunk ({len(chunk)} chars): {chunk[:120+120]}")
 
     return chunks
 

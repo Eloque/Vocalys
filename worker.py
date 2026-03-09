@@ -1,15 +1,18 @@
 # Create the folders and synthesize the audio.
+import datetime
 import json
 import os
+import time
 
+from boson_multimodal.audio_processing.higgs_audio_tokenizer import load_higgs_audio_tokenizer
 
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True,max_split_size_mb:128"
 
 from enum import Enum, auto
 
 import chunker
-from boson import initialize_synthesization, sync_voice_prompts
-from examples.generation import prepare_generation_context
+from boson import initialize_synthesization, sync_voice_prompts, get_device
+from examples.generation import prepare_generation_context, HiggsAudioModelClient
 import torch
 
 import soundfile as sf
@@ -32,131 +35,83 @@ def synthesize_audio(model_client, tokenizer, text, voice_sample, filename, max_
 
     print(f"File {filename} does not exist, missing {voice_sample['name']} voice sample, synthesizing...")
 
-    try:
-        chunked_text = chunker.chunk_text(text, max_chunk_size)
-        style = voice_sample["style"]
+    device = get_device("auto")
+    device_id = None if device == "cpu" else int(device.split(":")[-1])
 
-        messages, audio_ids = prepare_generation_context(
-            scene_prompt=style,
-            ref_audio=voice_sample["name"],
-            ref_audio_in_system_message=True,
-            audio_tokenizer=tokenizer,
-            speaker_tags=[],
-        )
+    # Chunk the text into smaller pieces based on the max_chunk_size
+    chunked_text = chunker.chunk_text(text, max_chunk_size)
 
-        ras_win_len = 32
-        ras_win_max_num_repeat = 4
-        generation_chunk_buffer_size = 3
+    # only keep the first 1 chunks for testing
+    chunked_text = chunked_text[:1]
 
-        temperature = voice_sample["temperature"]
-        top_k = voice_sample["top_k"]
-        top_p = voice_sample["top_p"]
+    style = voice_sample["style"]
 
-        concat_wv, sr, text_output = model_client.generate(
-            messages=messages,
-            audio_ids=audio_ids,
-            chunked_text=chunked_text,
-            generation_chunk_buffer_size=generation_chunk_buffer_size,
-            temperature=temperature,
-            top_k=top_k,
-            top_p=top_p,
-            ras_win_len=ras_win_len,
-            ras_win_max_num_repeat=ras_win_max_num_repeat,
-            seed=1001,
-        )
+    messages, audio_ids = prepare_generation_context(
+        scene_prompt=style,
+        ref_audio=voice_sample["name"],
+        ref_audio_in_system_message=True,
+        audio_tokenizer=tokenizer,
+        speaker_tags=[],
+    )
 
-        sf.write(filename, concat_wv, sr)
-        torch.cuda.empty_cache()
+    print(f"{voice_sample['name']} context generated.")
 
-    except torch.OutOfMemoryError as e:
-        print(f"Error synthesizing audio for {filename}")
+    ras_win_len = 32
+    ras_win_max_num_repeat = 4
+    generation_chunk_buffer_size = 3
 
-        if max_chunk_size > 40:
+    temperature = voice_sample["temperature"]
+    top_k = voice_sample["top_k"]
+    top_p = voice_sample["top_p"]
 
-            print(f"Retrying with smaller chunk size: {max_chunk_size - 20}")
-            return synthesize_audio(model_client, tokenizer, text, voice_sample, filename, max_chunk_size - 20)
+    concat_wv, sr, text_output = model_client.generate(
+        messages=messages,
+        audio_ids=audio_ids,
+        chunked_text=chunked_text,
+        generation_chunk_buffer_size=generation_chunk_buffer_size,
+        temperature=temperature,
+        top_k=top_k,
+        top_p=top_p,
+        ras_win_len=ras_win_len,
+        ras_win_max_num_repeat=ras_win_max_num_repeat,
+        seed=1001001,
+    )
 
-        else:
-
-            print(f"Error synthesizing audio for {filename}: {e}, no chunk size left, skipping.")
-
-    except Exception as e:
-        print(f"Error synthesizing audio for {filename}: {e}, no retry, skipping.")
+    sf.write(filename, concat_wv, sr)
+    torch.cuda.empty_cache()
 
 def main():
 
-    # Prepare the model client and tokenizer for synthesization
+    # Load voices
+    voices = json.load(open("./voices/voices.json"))
+    voices = voices["voices"]
     sync_voice_prompts()
-    model_client, tokenizer = initialize_synthesization()
-
-    style = (
-        "Narrate with controlled intensity. "
-        "Maintain steady pacing, but accelerate during action sequences. "
-        "When a sentence is short and declarative, slow slightly and add weight. "
-        "Pause briefly before final decisive statements. "
-        "Avoid neutral tone on climactic lines. "
-    )
-
-    first = { "name": "first",
-              "temperature": 0.70,
-              "top_k": 60,
-              "top_p": 0.95,
-              "style": style}
-
-    style = (
-        "Narrate with controlled intensity. "
-        "Maintain steady pacing, but accelerate during action sequences. "
-        "When a sentence is short and declarative, slow slightly and add weight. "
-        "Pause briefly before final decisive statements. "
-        "Avoid neutral tone on climactic lines. "
-    )
-
-    fred = { "name": "fred",
-              "temperature": 0.70,
-              "top_k": 60,
-              "top_p": 0.95,
-              "style": style}
-
-    style = (
-        "Narrate with controlled intensity. "
-        "Maintain steady pacing, but accelerate during action sequences. "
-        "When a sentence is short and declarative, slow slightly and add weight. "
-        "Pause briefly before final decisive statements. "
-        "Avoid neutral tone on climactic lines. "
-    )
-
-    victor = { "name": "victor",
-               "temperature": 0.85,
-               "top_k": 80,
-               "top_p": 0.95,
-               "style": style}
-
-    style = (
-        "You are a solemn battle psyker. "
-        "Voice is deep, resonant, and controlled. "
-        "Speak slowly with deliberate authority. "
-        "Emotion is restrained but powerful beneath the surface. "
-        "Emphasize key words with weight, not volume. "
-        "Pause slightly before decisive statements. "
-        "Never sound hurried. "
-        "Let declarations feel inevitable. "
-    )
-
-    librarian = { "name": "librarian",
-                  "temperature": 0.68,
-                  "top_k": 55,
-                  "top_p": 0.92,
-                  "style": style}
 
     input_file = "./input/scenarios/book.json"
     book = json.load(open(input_file))
 
-    voices = [librarian, fred, victor, first]
+    # only get the first voice for testing
+    voices = [voices[0], voices[3]]
 
     # check if the output folder exists, if not create it
     output_folder = "./output"
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
+
+    # # Load the tokenizer
+    # tokenizer = load_higgs_audio_tokenizer("bosonai/higgs-audio-v2-tokenizer", device=get_device("cpu"))
+    #
+    # model_client = HiggsAudioModelClient(
+    #     model_path="bosonai/higgs-audio-v2-generation-3B-base",
+    #     audio_tokenizer=tokenizer,
+    #     device_id=device_id,
+    #     max_new_tokens=4096, # 378, # $4096 / 8,
+    #     use_static_kv_cache=False,
+    #     use_quantization=True,
+    #     quantization_bits=8,
+    # )
+
+    client_model, tokenizer = initialize_synthesization()
 
     for entry in book[:]:
 
@@ -220,7 +175,7 @@ def main():
                             manifest["clips"].append({
                                 "header": section["header"],
                                 "text": section["text"],
-                                "audio": {}
+                                "audio": list()
                             })
 
                     # Per voice, synthesize the audio for the sections to voice
@@ -234,12 +189,72 @@ def main():
                             filename = f"{clip['header']}.wav"
                             filename = os.path.join(voice_folder, filename)
 
-                            synthesize_audio(model_client, tokenizer, clip["text"], voice, filename)
+                            synthesizing = True
+                            max_chunk_size = 200
 
-                            clip["audio"][voice["name"]] = f"{voice['name']}/{clip['header']}.wav"
+                            # check if voice has a chunk size, if it does, use it as the initial chunk size for synthesis, otherwise use the default chunk size
+                            if "chunk_size" in voice and voice["chunk_size"] is not None:
+                                max_chunk_size = voice["chunk_size"]
+                            else:
+                                voice["chunk_size"] = max_chunk_size
 
-                    with open(manifest_file, "w", encoding="utf-8") as f:
-                        json.dump(manifest, f, indent=2, ensure_ascii=False)
+                            # check if the files already exists, if it does, skip the synthesis
+                            if os.path.exists(filename):
+                                print(f"File {filename} already exists, skipping synthesis.")
+                                continue
+
+                            while synthesizing:
+                                oom = False
+
+                                try:
+                                    start = time.perf_counter()
+                                    print(f"Synthesizing with chunk size: {max_chunk_size}")
+                                    print(torch.cuda.memory_allocated() / 1024 ** 2, torch.cuda.memory_reserved() / 1024 ** 2)
+
+                                    # synthesize_audio(client_model, tokenizer, clip["text"], voice, filename, max_chunk_size=max_chunk_size)
+                                    synthesize_audio(client_model, tokenizer, "There is a spot at the base of your skull", voice, filename,
+                                                     max_chunk_size=max_chunk_size)
+
+                                    elapsed = time.perf_counter() - start
+                                    print(f"{elapsed:.2f}s to synthesize {filename}")
+
+                                    synthesizing = False
+
+                                except torch.OutOfMemoryError:
+                                    print("OOM on clip:", clip["header"])
+                                    print(torch.cuda.memory_allocated() / 1024 ** 2, torch.cuda.memory_reserved() / 1024 ** 2)
+                                    oom = True
+
+                                if oom:
+                                    print("Leaving exception handler")
+                                    print(torch.cuda.memory_allocated() / 1024 ** 2, torch.cuda.memory_reserved() / 1024 ** 2)
+
+                                    if max_chunk_size > 100:
+                                        max_chunk_size -= 20
+                                        print(f"Retrying with smaller chunk size: {max_chunk_size}")
+                                    else:
+                                        print(f"Error synthesizing audio for {filename}: OOM, no chunk size left, skipping.")
+                                        synthesizing = False
+
+                            audio = {
+                                "voice": voice["name"],
+                                "file": f"{voice['name']}/{clip['header']}.wav",
+                                "chunk_size": max_chunk_size,
+                                "creation_time": datetime.datetime.now().isoformat()
+                            }
+
+                            # check if audio is already in the manifest, if it is, replace it
+                            existing_audio = next((a for a in clip["audio"] if a["file"] == audio["file"]), None)
+
+                            if existing_audio is not None:
+                                existing_audio.update(audio)
+                            else:
+                                clip["audio"].append(audio)
+
+                            voice["chunk_size"] = max_chunk_size + 40
+
+                            with open(manifest_file, "w", encoding="utf-8") as f:
+                                json.dump(manifest, f, indent=2, ensure_ascii=False)
 
         except Exception as e:
             print(e)

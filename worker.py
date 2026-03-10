@@ -40,9 +40,14 @@ def synthesize_audio(model_client, tokenizer, text, voice_sample, filename, max_
 
     # Chunk the text into smaller pieces based on the max_chunk_size
     chunked_text = chunker.chunk_text(text, max_chunk_size)
+    primed  = False
 
     # only keep the first 1 chunks for testing
-    chunked_text = chunked_text[:1]
+    # chunked_text = chunked_text[:1]
+    # check if voice has a primer, if it does, add it to the beginning of the chunked text
+    if "primer" in voice_sample and voice_sample["primer"] is not None:
+        chunked_text.insert(0, voice_sample["primer"])
+        primed = True
 
     style = voice_sample["style"]
 
@@ -75,6 +80,7 @@ def synthesize_audio(model_client, tokenizer, text, voice_sample, filename, max_
         ras_win_len=ras_win_len,
         ras_win_max_num_repeat=ras_win_max_num_repeat,
         seed=1001001,
+        primed=primed
     )
 
     sf.write(filename, concat_wv, sr)
@@ -85,13 +91,14 @@ def main():
     # Load voices
     voices = json.load(open("./voices/voices.json"))
     voices = voices["voices"]
+
     sync_voice_prompts()
 
     input_file = "./input/scenarios/book.json"
     book = json.load(open(input_file))
 
     # only get the first voice for testing
-    voices = [voices[0], voices[3]]
+    # voices = [voices[0], voices[3]]
 
     # check if the output folder exists, if not create it
     output_folder = "./output"
@@ -130,6 +137,9 @@ def main():
 
                     # pad number to be 3 digits
                     number = str(entry['number']).zfill(3)
+
+                    if entry['number'] != '62':
+                        continue
 
                     # Create a folder for the scenario
                     scenario_folder = os.path.join(output_folder, f"{number} - {entry['title']}")
@@ -190,7 +200,7 @@ def main():
                             filename = os.path.join(voice_folder, filename)
 
                             synthesizing = True
-                            max_chunk_size = 200
+                            max_chunk_size = 600
 
                             # check if voice has a chunk size, if it does, use it as the initial chunk size for synthesis, otherwise use the default chunk size
                             if "chunk_size" in voice and voice["chunk_size"] is not None:
@@ -212,7 +222,7 @@ def main():
                                     print(torch.cuda.memory_allocated() / 1024 ** 2, torch.cuda.memory_reserved() / 1024 ** 2)
 
                                     # synthesize_audio(client_model, tokenizer, clip["text"], voice, filename, max_chunk_size=max_chunk_size)
-                                    synthesize_audio(client_model, tokenizer, "There is a spot at the base of your skull", voice, filename,
+                                    synthesize_audio(client_model, tokenizer, clip["text"], voice, filename,
                                                      max_chunk_size=max_chunk_size)
 
                                     elapsed = time.perf_counter() - start
@@ -251,8 +261,8 @@ def main():
                             else:
                                 clip["audio"].append(audio)
 
-                            voice["chunk_size"] = max_chunk_size + 40
-
+                            print(f"Chunk size found is : {max_chunk_size}")
+                            
                             with open(manifest_file, "w", encoding="utf-8") as f:
                                 json.dump(manifest, f, indent=2, ensure_ascii=False)
 

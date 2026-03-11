@@ -29,6 +29,9 @@ def get_headers_paragraphs(words, ignore_italic=False):
 
         h = word.get("height")
 
+        if word["text"] == "85.1":
+            pass
+
         if h == 10.0:
             paragraph_words.append(word)
         elif h == 12.0:
@@ -413,7 +416,24 @@ def get_sections(words, pil_img):
 
 def draw_sections(sections, target_img):
     for section in sections:
-        bbox = section["bbox"]
+        color = "#{:06x}".format(random.randint(0, 0xFFFFFF))
+
+        target_img.draw_rect(
+            section['bbox'],
+            stroke=color,
+            fill=TRANSPARENT,
+            stroke_width=4
+        )
+
+def draw_images(images, target_img):
+    for image in images:
+        x0 = image["x0"]
+        x1 = image["x1"]
+        top = image.get("top", image["y0"])
+        bottom = image.get("bottom", image["y1"])
+
+        bbox = (x0, top, x1, bottom)
+
         color = "#{:06x}".format(random.randint(0, 0xFFFFFF))
 
         target_img.draw_rect(
@@ -422,6 +442,7 @@ def draw_sections(sections, target_img):
             fill=TRANSPARENT,
             stroke_width=1
         )
+
 
 def filter_words(words, exclude_rects):
     kept = []

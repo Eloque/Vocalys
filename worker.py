@@ -138,9 +138,6 @@ def main():
                     # pad number to be 3 digits
                     number = str(entry['number']).zfill(3)
 
-                    if entry['number'] != '62':
-                        continue
-
                     # Create a folder for the scenario
                     scenario_folder = os.path.join(output_folder, f"{number} - {entry['title']}")
                     if not os.path.exists(scenario_folder):
@@ -221,7 +218,6 @@ def main():
                                     print(f"Synthesizing with chunk size: {max_chunk_size}")
                                     print(torch.cuda.memory_allocated() / 1024 ** 2, torch.cuda.memory_reserved() / 1024 ** 2)
 
-                                    # synthesize_audio(client_model, tokenizer, clip["text"], voice, filename, max_chunk_size=max_chunk_size)
                                     synthesize_audio(client_model, tokenizer, clip["text"], voice, filename,
                                                      max_chunk_size=max_chunk_size)
 

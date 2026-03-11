@@ -7,13 +7,13 @@ from blocker import *
 # get a list of all the files in the input directory
 import os
 
-input_folder = "./input/books"
+input_folder = "../input/books"
 input_files = [f for f in os.listdir(input_folder) if f.startswith("stripped-scenario-book") and f.endswith(".pdf")]
 
 print("Input files:", input_files)
 book = list()
 
-for entry in input_files:
+for entry in input_files[:1]:
     pdf_file = os.path.join(input_folder, entry)
     pdf = pdfplumber.open(pdf_file)  # See note below
     print("Processing file:", entry)
@@ -381,7 +381,7 @@ for entry in input_files:
             print("Error processing file:", entry)
             print(e)
 
-input_file = "./input/scenarios/book.json"
+input_file = "../input/scenarios/book.json"
 book = json.load(open(input_file))
 
 # remove all items that don't have a number key, those are wrong

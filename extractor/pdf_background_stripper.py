@@ -91,9 +91,24 @@ for book in input_books:
 
 		writer.add_page(page)
 
-		# with open(f"page_{i+1:03}.pdf", "wb") as f:
-		# 	writer.write(f)
+input_books = [f for f in os.listdir(input_folder) if f.startswith("fh-section-book-") and f.endswith(".pdf")]
 
-	output_filename = book.replace("fh-scenario-book-", "stripped-scenario-book-")
+for book in input_books:
+
+	reader = PdfReader(os.path.join(input_folder, book))
+
+	writer = PdfWriter()
+	for i, page in enumerate(reader.pages):
+		media_box = page.mediabox
+		page_width = float(media_box.width)
+		page_height = float(media_box.height)
+
+		resources = page.get("/Resources")
+		strip_backgrounds(resources, page_width, page_height)
+		strip_background_annots(page)
+
+		writer.add_page(page)
+
+	output_filename = book.replace("fh-section-book-", "stripped-section-book-")
 	with open(os.path.join(input_folder, output_filename), "wb") as f:
 		writer.write(f)

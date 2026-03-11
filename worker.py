@@ -4,8 +4,6 @@ import json
 import os
 import time
 
-from boson_multimodal.audio_processing.higgs_audio_tokenizer import load_higgs_audio_tokenizer
-
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True,max_split_size_mb:128"
 
 from enum import Enum, auto
@@ -27,8 +25,8 @@ def synthesize_audio(model_client, tokenizer, text, voice_sample, filename, max_
 
     # check if the files already exists, if it does, skip the synthesis
     if os.path.exists(filename):
-        # print(f"File {filename} already exists, skipping synthesis.")
-        return
+        print(f"File {filename} already exists, skipping synthesis.")
+        return False
 
     if voice_sample == "None":
         voice_sample = None
@@ -85,6 +83,47 @@ def synthesize_audio(model_client, tokenizer, text, voice_sample, filename, max_
 
     sf.write(filename, concat_wv, sr)
     torch.cuda.empty_cache()
+
+    return True
+
+def synthesization_loop(max_chunk_size, client_model, tokenizer, text, voice, filename):
+
+    synthesizing = True
+    result = False
+
+    while synthesizing:
+        oom = False
+
+        try:
+            start = time.perf_counter()
+            print(f"Synthesizing with chunk size: {max_chunk_size}")
+            print(torch.cuda.memory_allocated() / 1024 ** 2, torch.cuda.memory_reserved() / 1024 ** 2)
+
+            result = synthesize_audio(client_model, tokenizer, text, voice, filename,
+                             max_chunk_size=max_chunk_size)
+
+            elapsed = time.perf_counter() - start
+            print(f"{elapsed:.2f}s to synthesize {filename}")
+
+            synthesizing = False
+
+        except torch.OutOfMemoryError:
+            print("OOM on clip:", clip["header"])
+            print(torch.cuda.memory_allocated() / 1024 ** 2, torch.cuda.memory_reserved() / 1024 ** 2)
+            oom = True
+
+        if oom:
+            print("Leaving exception handler")
+            print(torch.cuda.memory_allocated() / 1024 ** 2, torch.cuda.memory_reserved() / 1024 ** 2)
+
+            if max_chunk_size > 100:
+                max_chunk_size -= 20
+                print(f"Retrying with smaller chunk size: {max_chunk_size}")
+            else:
+                print(f"Error synthesizing audio for {filename}: OOM, no chunk size left, skipping.")
+                synthesizing = False
+
+    return result
 
 def main():
 
@@ -192,11 +231,41 @@ def main():
                         if not os.path.exists(voice_folder):
                             os.makedirs(voice_folder)
 
+                        # The title
+                        filename = "Title.wav"
+                        filename = os.path.join(voice_folder, filename)
+
+                        if synthesization_loop(voice["chunk_size"], client_model, tokenizer, entry["title"], voice, filename):
+                            audio = {
+                                "voice": voice["name"],
+                                "file": f"{voice['name']}/Title.wav",
+                                "chunk_size": voice["chunk_size"],
+                                "creation_time": datetime.datetime.now().isoformat()
+                            }
+
+                            # check if the manifest scenario has an audio list
+                            if "audio" not in manifest["scenario"]:
+                                manifest["scenario"]["audio"] = list()
+
+                            manifest["scenario"]["audio"].append(audio)
+
+                            with open(manifest_file, "w", encoding="utf-8") as f:
+                                json.dump(manifest, f, indent=2, ensure_ascii=False)
+
                         for clip in clips:
                             filename = f"{clip['header']}.wav"
                             filename = os.path.join(voice_folder, filename)
 
-                            synthesizing = True
+                            # Check if the file is already in the manifest, if it is see if the chunk size is set
+                            for item in clip["audio"]:
+                                if item["file"] == f"{voice['name']}/{clip['header']}.wav":
+                                    if "chunk_size" in item:
+
+                                        if item["chunk_size"] == -1:
+                                            print(f"Non-Set Chunk size found, deleting file and recreating")
+                                            os.remove(filename)
+                                        continue
+
                             max_chunk_size = 600
 
                             # check if voice has a chunk size, if it does, use it as the initial chunk size for synthesis, otherwise use the default chunk size
@@ -205,62 +274,30 @@ def main():
                             else:
                                 voice["chunk_size"] = max_chunk_size
 
-                            # check if the files already exists, if it does, skip the synthesis
-                            if os.path.exists(filename):
-                                print(f"File {filename} already exists, skipping synthesis.")
-                                continue
+                            # The main text
+                            result = synthesization_loop(max_chunk_size, client_model, tokenizer, clip["text"], voice, filename)
 
-                            while synthesizing:
-                                oom = False
+                            if result:
+                                audio = {
+                                    "voice": voice["name"],
+                                    "file": f"{voice['name']}/{clip['header']}.wav",
+                                    "chunk_size": max_chunk_size,
+                                    "creation_time": datetime.datetime.now().isoformat()
+                                }
 
-                                try:
-                                    start = time.perf_counter()
-                                    print(f"Synthesizing with chunk size: {max_chunk_size}")
-                                    print(torch.cuda.memory_allocated() / 1024 ** 2, torch.cuda.memory_reserved() / 1024 ** 2)
+                                # check if audio is already in the manifest, if it is, replace it
+                                existing_audio = next((a for a in clip["audio"] if a["file"] == audio["file"]), None)
 
-                                    synthesize_audio(client_model, tokenizer, clip["text"], voice, filename,
-                                                     max_chunk_size=max_chunk_size)
+                                if existing_audio is not None:
+                                    existing_audio.update(audio)
+                                else:
+                                    clip["audio"].append(audio)
 
-                                    elapsed = time.perf_counter() - start
-                                    print(f"{elapsed:.2f}s to synthesize {filename}")
+                                print(f"Chunk size found is : {max_chunk_size}")
 
-                                    synthesizing = False
+                                with open(manifest_file, "w", encoding="utf-8") as f:
+                                    json.dump(manifest, f, indent=2, ensure_ascii=False)
 
-                                except torch.OutOfMemoryError:
-                                    print("OOM on clip:", clip["header"])
-                                    print(torch.cuda.memory_allocated() / 1024 ** 2, torch.cuda.memory_reserved() / 1024 ** 2)
-                                    oom = True
-
-                                if oom:
-                                    print("Leaving exception handler")
-                                    print(torch.cuda.memory_allocated() / 1024 ** 2, torch.cuda.memory_reserved() / 1024 ** 2)
-
-                                    if max_chunk_size > 100:
-                                        max_chunk_size -= 20
-                                        print(f"Retrying with smaller chunk size: {max_chunk_size}")
-                                    else:
-                                        print(f"Error synthesizing audio for {filename}: OOM, no chunk size left, skipping.")
-                                        synthesizing = False
-
-                            audio = {
-                                "voice": voice["name"],
-                                "file": f"{voice['name']}/{clip['header']}.wav",
-                                "chunk_size": max_chunk_size,
-                                "creation_time": datetime.datetime.now().isoformat()
-                            }
-
-                            # check if audio is already in the manifest, if it is, replace it
-                            existing_audio = next((a for a in clip["audio"] if a["file"] == audio["file"]), None)
-
-                            if existing_audio is not None:
-                                existing_audio.update(audio)
-                            else:
-                                clip["audio"].append(audio)
-
-                            print(f"Chunk size found is : {max_chunk_size}")
-                            
-                            with open(manifest_file, "w", encoding="utf-8") as f:
-                                json.dump(manifest, f, indent=2, ensure_ascii=False)
 
         except Exception as e:
             print(e)

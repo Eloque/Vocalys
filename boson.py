@@ -14,15 +14,12 @@ import chunker
 import torch
 import soundfile as sf
 
-from boson_multimodal.data_types import ChatMLSample, Message
 from boson_multimodal.audio_processing.higgs_audio_tokenizer import load_higgs_audio_tokenizer
 from examples.generation import HiggsAudioModelClient, prepare_generation_context, prepare_chunk_text, normalize_chinese_punctuation
-# from generation import prepare_generation_context
 
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", category=DeprecationWarning)
-
 
 # Model and tokenizer names
 MODEL_PATH = "bosonai/higgs-audio-v2-generation-3B-base"
@@ -67,17 +64,6 @@ def initialize_synthesization():
     audio_tokenizer = load_higgs_audio_tokenizer("bosonai/higgs-audio-v2-tokenizer", device=get_device("cpu"))
 
     # To prevent multiple loadings, run this once
-    # model_client = HiggsAudioModelClient(
-    #     model_path="bosonai/higgs-audio-v2-generation-3B-base",
-    #     audio_tokenizer="bosonai/higgs-audio-v2-tokenizer",
-    #     device_id=device_id,
-    #     max_new_tokens=4096, # $4096 / 8,
-    #     use_static_kv_cache=False,
-    #     use_quantization=True,
-    #     quantization_bits=4,
-    # )
-
-    # To prevent multiple loadings, run this once
     model_client = HiggsAudioModelClient(
         model_path="bosonai/higgs-audio-v2-generation-3B-base",
         audio_tokenizer=audio_tokenizer,
@@ -90,16 +76,6 @@ def initialize_synthesization():
 
 
     return model_client, audio_tokenizer
-
-def get_generation_messages(voice):
-
-    messages, audio_ids = prepare_generation_context(
-        scene_prompt="",
-        ref_audio=voice,
-        ref_audio_in_system_message=True,
-        audio_tokenizer=audio_tokenizer,
-        speaker_tags=speaker_tags,
-    )
 
 def main():
     parser = argparse.ArgumentParser(
@@ -146,16 +122,6 @@ def main():
     device_id = None if device == "cpu" else int(device.split(":")[-1])
 
     audio_tokenizer = load_higgs_audio_tokenizer("bosonai/higgs-audio-v2-tokenizer", device=device)
-
-    # model_client = HiggsAudioModelClient(
-    #     model_path="bosonai/higgs-audio-v2-generation-3B-base",
-    #     audio_tokenizer="bosonai/higgs-audio-v2-tokenizer",
-    #     device_id=device_id,
-    #     max_new_tokens=4096,
-    #     use_static_kv_cache=False,
-    #     use_quantization=True,
-    #     quantization_bits=4,
-    # )
 
     model_client = get_model_client()
 

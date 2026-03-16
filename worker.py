@@ -3,17 +3,18 @@ import datetime
 import json
 import os
 import time
+import torch
+
+from loguru import logger
+from enum import Enum, auto
 
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True,max_split_size_mb:128"
 
-from enum import Enum, auto
-
 import chunker
 from boson import initialize_synthesization, sync_voice_prompts, get_device
-from examples.generation import prepare_generation_context, HiggsAudioModelClient
-import torch
-
+from examples.generation import prepare_generation_context
 import soundfile as sf
+
 
 class PageType(Enum):
     TITLE = auto()
@@ -21,17 +22,33 @@ class PageType(Enum):
     CONTINUED_SCENARIO = auto()
     UNKNOWN = auto()
 
-def synthesize_audio(model_client, tokenizer, text, voice_sample, filename, max_chunk_size=120):
+
+def generate_context_per_voice(voices, tokenizer):
+
+    for voice in voices:
+
+        messages, audio_ids = prepare_generation_context(
+            scene_prompt=voice["style"],
+            ref_audio=voice["name"],
+            ref_audio_in_system_message=True,
+            audio_tokenizer=tokenizer,
+            speaker_tags=[],
+        )
+
+        voice["messages"] = messages
+        voice["audio_ids"] = audio_ids
+
+def synthesize_audio(model_client, tokenizer, text, voice, filename, max_chunk_size=120):
 
     # check if the files already exists, if it does, skip the synthesis
     if os.path.exists(filename):
         print(f"File {filename} already exists, skipping synthesis.")
         return False
 
-    if voice_sample == "None":
-        voice_sample = None
+    if voice == "None":
+        voice = None
 
-    print(f"File {filename} does not exist, missing {voice_sample['name']} voice sample, synthesizing...")
+    print(f"File {filename} does not exist, missing {voice['name']} voice sample, synthesizing...")
 
     device = get_device("auto")
     device_id = None if device == "cpu" else int(device.split(":")[-1])
@@ -43,29 +60,35 @@ def synthesize_audio(model_client, tokenizer, text, voice_sample, filename, max_
     # only keep the first 1 chunks for testing
     # chunked_text = chunked_text[:1]
     # check if voice has a primer, if it does, add it to the beginning of the chunked text
-    if "primer" in voice_sample and voice_sample["primer"] is not None:
-        chunked_text.insert(0, voice_sample["primer"])
+    if "primer" in voice and voice["primer"] is not None:
+        chunked_text.insert(0, voice["primer"])
         primed = True
 
-    style = voice_sample["style"]
+    # # only the first for tes
+    # chunked_text = chunked_text[:1]
+    # primed = False
 
-    messages, audio_ids = prepare_generation_context(
-        scene_prompt=style,
-        ref_audio=voice_sample["name"],
-        ref_audio_in_system_message=True,
-        audio_tokenizer=tokenizer,
-        speaker_tags=[],
-    )
+    # style = voice["style"]
 
-    print(f"{voice_sample['name']} context generated.")
+    # messages, audio_ids = prepare_generation_context(
+    #     scene_prompt=style,
+    #     ref_audio=voice_sample["name"],
+    #     ref_audio_in_system_message=True,
+    #     audio_tokenizer=tokenizer,
+    #     speaker_tags=[],
+    # )
+
+    messages = voice["messages"]
+    audio_ids = voice["audio_ids"]
+
 
     ras_win_len = 32
     ras_win_max_num_repeat = 4
     generation_chunk_buffer_size = 3
 
-    temperature = voice_sample["temperature"]
-    top_k = voice_sample["top_k"]
-    top_p = voice_sample["top_p"]
+    temperature = voice["temperature"]
+    top_k = voice["top_k"]
+    top_p = voice["top_p"]
 
     concat_wv, sr, text_output = model_client.generate(
         messages=messages,
@@ -108,9 +131,14 @@ def synthesization_loop(max_chunk_size, client_model, tokenizer, text, voice, fi
             synthesizing = False
 
         except torch.OutOfMemoryError:
-            print("OOM on clip:", clip["header"])
+            print("OOM on clip:", filename)
             print(torch.cuda.memory_allocated() / 1024 ** 2, torch.cuda.memory_reserved() / 1024 ** 2)
             oom = True
+
+        except Exception as e:
+            print("Error on clip:", filename)
+            print(e)
+            exit()
 
         if oom:
             print("Leaving exception handler")
@@ -123,15 +151,22 @@ def synthesization_loop(max_chunk_size, client_model, tokenizer, text, voice, fi
                 print(f"Error synthesizing audio for {filename}: OOM, no chunk size left, skipping.")
                 synthesizing = False
 
-    return result
+    return result, max_chunk_size
 
 def main():
 
+    logger.info(f"Starting Vocalis - Synthesizing Audio")
+    # Load models
+    client_model, tokenizer = initialize_synthesization()
+
     # Load voices
+    logger.info(f"Creating context for voices")
     voices = json.load(open("./voices/voices.json"))
     voices = voices["voices"]
-
     sync_voice_prompts()
+
+    # generate the contexts once, to save time later
+    generate_context_per_voice(voices, tokenizer)
 
     input_file = "./input/scenarios/book.json"
     book = json.load(open(input_file))
@@ -156,8 +191,6 @@ def main():
     #     use_quantization=True,
     #     quantization_bits=8,
     # )
-
-    client_model, tokenizer = initialize_synthesization()
 
     for entry in book[:]:
 
@@ -235,11 +268,13 @@ def main():
                         filename = "Title.wav"
                         filename = os.path.join(voice_folder, filename)
 
-                        if synthesization_loop(voice["chunk_size"], client_model, tokenizer, entry["title"], voice, filename):
+                        result, chunked_size_success = synthesization_loop(voice["chunk_size"], client_model, tokenizer, entry["title"].upper(), voice, filename)
+
+                        if result:
                             audio = {
                                 "voice": voice["name"],
                                 "file": f"{voice['name']}/Title.wav",
-                                "chunk_size": voice["chunk_size"],
+                                "chunk_size": chunked_size_success,
                                 "creation_time": datetime.datetime.now().isoformat()
                             }
 
@@ -263,7 +298,12 @@ def main():
 
                                         if item["chunk_size"] == -1:
                                             print(f"Non-Set Chunk size found, deleting file and recreating")
-                                            os.remove(filename)
+                                            try:
+                                                os.remove(filename)
+                                            except:
+                                                print("No file found")
+                                                pass
+
                                         continue
 
                             max_chunk_size = 600
@@ -275,13 +315,13 @@ def main():
                                 voice["chunk_size"] = max_chunk_size
 
                             # The main text
-                            result = synthesization_loop(max_chunk_size, client_model, tokenizer, clip["text"], voice, filename)
+                            result, chunked_size_success = synthesization_loop(max_chunk_size, client_model, tokenizer, clip["text"], voice, filename)
 
                             if result:
                                 audio = {
                                     "voice": voice["name"],
                                     "file": f"{voice['name']}/{clip['header']}.wav",
-                                    "chunk_size": max_chunk_size,
+                                    "chunk_size": chunked_size_success,
                                     "creation_time": datetime.datetime.now().isoformat()
                                 }
 
@@ -293,7 +333,7 @@ def main():
                                 else:
                                     clip["audio"].append(audio)
 
-                                print(f"Chunk size found is : {max_chunk_size}")
+                                print(f"Chunk size found is : {chunked_size_success}")
 
                                 with open(manifest_file, "w", encoding="utf-8") as f:
                                     json.dump(manifest, f, indent=2, ensure_ascii=False)

@@ -3,18 +3,19 @@ import datetime
 import json
 import os
 import time
+
 import torch
 
 from loguru import logger
 from enum import Enum, auto
-
-os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True,max_split_size_mb:128"
 
 import chunker
 from boson import initialize_synthesization, sync_voice_prompts, get_device
 from examples.generation import prepare_generation_context
 import soundfile as sf
 
+# Prevent fragmentation, all little bits help
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True,max_split_size_mb:128"
 
 class PageType(Enum):
     TITLE = auto()
@@ -25,7 +26,11 @@ class PageType(Enum):
 
 def generate_context_per_voice(voices, tokenizer):
 
+    logger.info("Generating context for voices")
+
     for voice in voices:
+
+        logger.info(f'Generating for voice: {voice["name"]}')
 
         messages, audio_ids = prepare_generation_context(
             scene_prompt=voice["style"],
@@ -39,48 +44,48 @@ def generate_context_per_voice(voices, tokenizer):
         voice["audio_ids"] = audio_ids
 
 def synthesize_audio(model_client, tokenizer, text, voice, filename, max_chunk_size=120):
+    """
+    Generate speech audio for the given text using a prepared voice configuration.
 
-    # check if the files already exists, if it does, skip the synthesis
+    Args:
+        model_client: Initialized audio generation client used to run inference.
+        tokenizer: Audio/token context object required by the generation pipeline.
+        text (str): Input text to synthesize.
+        voice (dict): Voice configuration containing generation settings and
+            prepared context such as prompt messages, audio IDs, and optional primer.
+        filename (str): Output path for the generated audio file.
+        max_chunk_size (int, optional): Maximum size used when splitting text into
+            chunks for generation. Defaults to 400.
+
+    Returns:
+        bool: True if audio was synthesized and written, False if synthesis was
+        skipped because the output file already existed.
+
+    Notes:
+        - Assumes the voice context has already been prepared before calling.
+    """
+
+    # check if the file already exists, if it does, skip the synthesis
     if os.path.exists(filename):
-        print(f"File {filename} already exists, skipping synthesis.")
+        logger.info(f"File {filename} already exists, skipping synthesis.")
         return False
 
     if voice == "None":
         voice = None
 
-    print(f"File {filename} does not exist, missing {voice['name']} voice sample, synthesizing...")
-
-    device = get_device("auto")
-    device_id = None if device == "cpu" else int(device.split(":")[-1])
+    logger.info(f"File {filename} does not exist, missing {voice['name']} voice sample, synthesizing...")
 
     # Chunk the text into smaller pieces based on the max_chunk_size
     chunked_text = chunker.chunk_text(text, max_chunk_size)
     primed  = False
 
-    # only keep the first 1 chunks for testing
-    # chunked_text = chunked_text[:1]
     # check if voice has a primer, if it does, add it to the beginning of the chunked text
     if "primer" in voice and voice["primer"] is not None:
         chunked_text.insert(0, voice["primer"])
         primed = True
 
-    # # only the first for tes
-    # chunked_text = chunked_text[:1]
-    # primed = False
-
-    # style = voice["style"]
-
-    # messages, audio_ids = prepare_generation_context(
-    #     scene_prompt=style,
-    #     ref_audio=voice_sample["name"],
-    #     ref_audio_in_system_message=True,
-    #     audio_tokenizer=tokenizer,
-    #     speaker_tags=[],
-    # )
-
     messages = voice["messages"]
     audio_ids = voice["audio_ids"]
-
 
     ras_win_len = 32
     ras_win_max_num_repeat = 4
@@ -109,46 +114,64 @@ def synthesize_audio(model_client, tokenizer, text, voice, filename, max_chunk_s
 
     return True
 
-def synthesization_loop(max_chunk_size, client_model, tokenizer, text, voice, filename):
+def synthesization_loop(client_model, tokenizer, text, voice, filename):
+
+    """
+    Attempt audio synthesis, reducing chunk size after out-of-memory
+    failures until synthesis succeeds or no smaller chunk size remains.
+
+    Args:
+        max_chunk_size (int): Initial chunk size to use for synthesis.
+        client_model: Initialized audio generation client used to run inference.
+        tokenizer: Audio/token context object required by the generation pipeline.
+        text (str): Input text to synthesize.
+        voice (dict): Voice configuration containing generation settings and
+            prepared context such as prompt messages, audio IDs, and optional primer.
+        filename (str): Output path for the generated audio file.
+
+    Returns:
+        tuple[bool, int]: Whether synthesis succeeded and the final chunk size used.
+    """
 
     synthesizing = True
     result = False
+
+    max_chunk_size = voice["chunk_size"]
 
     while synthesizing:
         oom = False
 
         try:
             start = time.perf_counter()
-            print(f"Synthesizing with chunk size: {max_chunk_size}")
-            print(torch.cuda.memory_allocated() / 1024 ** 2, torch.cuda.memory_reserved() / 1024 ** 2)
+            logger.info(f"Synthesizing with chunk size: {max_chunk_size}")
+            logger.info(torch.cuda.memory_allocated() / 1024 ** 2, torch.cuda.memory_reserved() / 1024 ** 2)
 
             result = synthesize_audio(client_model, tokenizer, text, voice, filename,
                              max_chunk_size=max_chunk_size)
 
             elapsed = time.perf_counter() - start
-            print(f"{elapsed:.2f}s to synthesize {filename}")
+            logger.info(f"{elapsed:.2f}s to synthesize {filename}")
 
             synthesizing = False
 
         except torch.OutOfMemoryError:
-            print("OOM on clip:", filename)
-            print(torch.cuda.memory_allocated() / 1024 ** 2, torch.cuda.memory_reserved() / 1024 ** 2)
+            logger.info("OOM on clip:", filename)
+            logger.info(torch.cuda.memory_allocated() / 1024 ** 2, torch.cuda.memory_reserved() / 1024 ** 2)
             oom = True
 
         except Exception as e:
-            print("Error on clip:", filename)
-            print(e)
-            exit()
+            logger.error("Error on clip:", filename)
+            logger.error(e)
 
         if oom:
-            print("Leaving exception handler")
-            print(torch.cuda.memory_allocated() / 1024 ** 2, torch.cuda.memory_reserved() / 1024 ** 2)
+            logger.info("Leaving exception handler")
+            logger.info(torch.cuda.memory_allocated() / 1024 ** 2, torch.cuda.memory_reserved() / 1024 ** 2)
 
             if max_chunk_size > 100:
                 max_chunk_size -= 20
-                print(f"Retrying with smaller chunk size: {max_chunk_size}")
+                logger.info(f"Retrying with smaller chunk size: {max_chunk_size}")
             else:
-                print(f"Error synthesizing audio for {filename}: OOM, no chunk size left, skipping.")
+                logger.info(f"Error synthesizing audio for {filename}: OOM, no chunk size left, skipping.")
                 synthesizing = False
 
     return result, max_chunk_size
@@ -179,19 +202,6 @@ def main():
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
-    # # Load the tokenizer
-    # tokenizer = load_higgs_audio_tokenizer("bosonai/higgs-audio-v2-tokenizer", device=get_device("cpu"))
-    #
-    # model_client = HiggsAudioModelClient(
-    #     model_path="bosonai/higgs-audio-v2-generation-3B-base",
-    #     audio_tokenizer=tokenizer,
-    #     device_id=device_id,
-    #     max_new_tokens=4096, # 378, # $4096 / 8,
-    #     use_static_kv_cache=False,
-    #     use_quantization=True,
-    #     quantization_bits=8,
-    # )
-
     for entry in book[:]:
 
         try:
@@ -201,11 +211,11 @@ def main():
 
             match page_type:
                 case PageType.TITLE:
-                    print(f"Title: {entry['title']}")
+                    logger.info(f"Title: {entry['title']}")
                     continue
 
                 case PageType.SCENARIO:
-                    print(f"Scenario: {entry['number']} {entry['title']}")
+                    logger.info(f"Scenario: {entry['number']} {entry['title']}")
 
                     # pad number to be 3 digits
                     number = str(entry['number']).zfill(3)
@@ -268,7 +278,11 @@ def main():
                         filename = "Title.wav"
                         filename = os.path.join(voice_folder, filename)
 
-                        result, chunked_size_success = synthesization_loop(voice["chunk_size"], client_model, tokenizer, entry["title"].upper(), voice, filename)
+                        result, chunked_size_success = synthesization_loop(client_model,
+                                                                           tokenizer,
+                                                                           entry["title"].upper(),
+                                                                           voice,
+                                                                           filename)
 
                         if result:
                             audio = {
@@ -291,31 +305,23 @@ def main():
                             filename = f"{clip['header']}.wav"
                             filename = os.path.join(voice_folder, filename)
 
-                            # Check if the file is already in the manifest, if it is see if the chunk size is set
-                            for item in clip["audio"]:
-                                if item["file"] == f"{voice['name']}/{clip['header']}.wav":
-                                    if "chunk_size" in item:
-
-                                        if item["chunk_size"] == -1:
-                                            print(f"Non-Set Chunk size found, deleting file and recreating")
-                                            try:
-                                                os.remove(filename)
-                                            except:
-                                                print("No file found")
-                                                pass
-
-                                        continue
-
                             max_chunk_size = 600
 
-                            # check if voice has a chunk size, if it does, use it as the initial chunk size for synthesis, otherwise use the default chunk size
+                            # check if a voice has a chunk size, if it does,
+                            # use it as the initial chunk size for synthesis,
+                            # otherwise use the default chunk size
+
                             if "chunk_size" in voice and voice["chunk_size"] is not None:
                                 max_chunk_size = voice["chunk_size"]
                             else:
                                 voice["chunk_size"] = max_chunk_size
 
                             # The main text
-                            result, chunked_size_success = synthesization_loop(max_chunk_size, client_model, tokenizer, clip["text"], voice, filename)
+                            result, chunked_size_success = synthesization_loop(client_model,
+                                                                               tokenizer,
+                                                                               clip["text"],
+                                                                               voice,
+                                                                               filename)
 
                             if result:
                                 audio = {
@@ -333,14 +339,14 @@ def main():
                                 else:
                                     clip["audio"].append(audio)
 
-                                print(f"Chunk size found is : {chunked_size_success}")
+                                logger.info(f"Chunk size found is : {chunked_size_success}")
 
                                 with open(manifest_file, "w", encoding="utf-8") as f:
                                     json.dump(manifest, f, indent=2, ensure_ascii=False)
 
 
         except Exception as e:
-            print(e)
+            logger.error(e)
 
 if __name__ == "__main__":
     main()

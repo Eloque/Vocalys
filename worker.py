@@ -23,6 +23,11 @@ class PageType(Enum):
     CONTINUED_SCENARIO = auto()
     UNKNOWN = auto()
 
+def log_cuda_memory():
+    """Log CUDA memory allocation and reservation in MB."""
+    allocated_mb = torch.cuda.memory_allocated() / 1024 ** 2
+    reserved_mb = torch.cuda.memory_reserved() / 1024 ** 2
+    logger.info(f"CUDA Memory - Allocated: {allocated_mb:.2f} MB, Reserved: {reserved_mb:.2f} MB")
 
 def generate_context_per_voice(voices, tokenizer):
 
@@ -32,18 +37,41 @@ def generate_context_per_voice(voices, tokenizer):
 
         logger.info(f'Generating for voice: {voice["name"]}')
 
-        messages, audio_ids = prepare_generation_context(
-            scene_prompt=voice["style"],
-            ref_audio=voice["name"],
-            ref_audio_in_system_message=True,
-            audio_tokenizer=tokenizer,
-            speaker_tags=[],
-        )
+        # check if a voice has a chunk size, if it does,
+        # use it as the initial chunk size for synthesis,
+        # otherwise use the default chunk size
+        max_chunk_size = 600
+
+        if "chunk_size" in voice and voice["chunk_size"] is not None:
+            pass
+        else:
+            voice["chunk_size"] = max_chunk_size
+
+        if voice["name"] != "Default":
+            messages, audio_ids = prepare_generation_context(
+                scene_prompt=voice["style"],
+                ref_audio=voice["name"],
+                ref_audio_in_system_message=True,
+                audio_tokenizer=tokenizer,
+                speaker_tags=[]
+            )
+        else:
+            messages, audio_ids = prepare_generation_context(
+                scene_prompt="",
+                ref_audio=None,
+                ref_audio_in_system_message=False,
+                audio_tokenizer=tokenizer,
+                speaker_tags=[]
+            )
+
+            voice["temperature"] = 0.65
+            voice["top_k"] = 80
+            voice["top_p"] = 0.97
 
         voice["messages"] = messages
         voice["audio_ids"] = audio_ids
 
-def synthesize_audio(model_client, tokenizer, text, voice, filename, max_chunk_size=120):
+def synthesize_audio(model_client, text, voice, filename, max_chunk_size=120):
     """
     Generate speech audio for the given text using a prepared voice configuration.
 
@@ -114,7 +142,7 @@ def synthesize_audio(model_client, tokenizer, text, voice, filename, max_chunk_s
 
     return True
 
-def synthesization_loop(client_model, tokenizer, text, voice, filename):
+def synthesization_loop(client_model,text, voice, filename):
 
     """
     Attempt audio synthesis, reducing chunk size after out-of-memory
@@ -123,7 +151,6 @@ def synthesization_loop(client_model, tokenizer, text, voice, filename):
     Args:
         max_chunk_size (int): Initial chunk size to use for synthesis.
         client_model: Initialized audio generation client used to run inference.
-        tokenizer: Audio/token context object required by the generation pipeline.
         text (str): Input text to synthesize.
         voice (dict): Voice configuration containing generation settings and
             prepared context such as prompt messages, audio IDs, and optional primer.
@@ -144,10 +171,9 @@ def synthesization_loop(client_model, tokenizer, text, voice, filename):
         try:
             start = time.perf_counter()
             logger.info(f"Synthesizing with chunk size: {max_chunk_size}")
-            logger.info(torch.cuda.memory_allocated() / 1024 ** 2, torch.cuda.memory_reserved() / 1024 ** 2)
+            log_cuda_memory()
 
-            result = synthesize_audio(client_model, tokenizer, text, voice, filename,
-                             max_chunk_size=max_chunk_size)
+            result = synthesize_audio(client_model, text, voice, filename, max_chunk_size=max_chunk_size)
 
             elapsed = time.perf_counter() - start
             logger.info(f"{elapsed:.2f}s to synthesize {filename}")
@@ -156,7 +182,7 @@ def synthesization_loop(client_model, tokenizer, text, voice, filename):
 
         except torch.OutOfMemoryError:
             logger.info("OOM on clip:", filename)
-            logger.info(torch.cuda.memory_allocated() / 1024 ** 2, torch.cuda.memory_reserved() / 1024 ** 2)
+            log_cuda_memory()
             oom = True
 
         except Exception as e:
@@ -165,7 +191,7 @@ def synthesization_loop(client_model, tokenizer, text, voice, filename):
 
         if oom:
             logger.info("Leaving exception handler")
-            logger.info(torch.cuda.memory_allocated() / 1024 ** 2, torch.cuda.memory_reserved() / 1024 ** 2)
+            log_cuda_memory()
 
             if max_chunk_size > 100:
                 max_chunk_size -= 20
@@ -182,11 +208,21 @@ def main():
     # Load models
     client_model, tokenizer = initialize_synthesization()
 
-    # Load voices
+    print(torch.cuda.is_available())
+    print(torch.cuda.memory_allocated() / 1024 ** 2, torch.cuda.memory_reserved() / 1024 ** 2)
+
+    # Try to load voices
+    try:
+        raise Exception("test")
+        voices = json.load(open("./voices/voices.json"))
+        voices = voices["voices"]
+        sync_voice_prompts()
+    except:
+        logger.info("No voices found, using default voice")
+        voices = list()
+        voices.append({"name": "Default", "style": None})
+
     logger.info(f"Creating context for voices")
-    voices = json.load(open("./voices/voices.json"))
-    voices = voices["voices"]
-    sync_voice_prompts()
 
     # generate the contexts once, to save time later
     generate_context_per_voice(voices, tokenizer)
@@ -279,7 +315,6 @@ def main():
                         filename = os.path.join(voice_folder, filename)
 
                         result, chunked_size_success = synthesization_loop(client_model,
-                                                                           tokenizer,
                                                                            entry["title"].upper(),
                                                                            voice,
                                                                            filename)
@@ -305,20 +340,8 @@ def main():
                             filename = f"{clip['header']}.wav"
                             filename = os.path.join(voice_folder, filename)
 
-                            max_chunk_size = 600
-
-                            # check if a voice has a chunk size, if it does,
-                            # use it as the initial chunk size for synthesis,
-                            # otherwise use the default chunk size
-
-                            if "chunk_size" in voice and voice["chunk_size"] is not None:
-                                max_chunk_size = voice["chunk_size"]
-                            else:
-                                voice["chunk_size"] = max_chunk_size
-
                             # The main text
                             result, chunked_size_success = synthesization_loop(client_model,
-                                                                               tokenizer,
                                                                                clip["text"],
                                                                                voice,
                                                                                filename)
@@ -343,6 +366,8 @@ def main():
 
                                 with open(manifest_file, "w", encoding="utf-8") as f:
                                     json.dump(manifest, f, indent=2, ensure_ascii=False)
+
+                                exit()
 
 
         except Exception as e:

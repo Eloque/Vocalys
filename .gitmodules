@@ -1,3 +1,6 @@
 [submodule "faster-higgs-audio"]
 	path = faster-higgs-audio
 	url = https://github.com/sorbetstudio/faster-higgs-audio.git
+[submodule "worldhaven"]
+	path = worldhaven
+	url = https://github.com/any2cards/worldhaven.git

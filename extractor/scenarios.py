@@ -29,7 +29,7 @@ for entry in input_files[:1]:
             im = page.to_image(72)
             pil_img = im.original
 
-            pil_img.save(f"output/processing.png")
+            pil_img.save(f"processing.png")
 
             # get the width of the page
             page_width = page.width

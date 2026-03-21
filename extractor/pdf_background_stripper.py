@@ -71,8 +71,8 @@ def add_background_color(writer, page, page_width, page_height, rgb=(0, 1, 0)):
 
 
 # find all the files in the input/books folder that match the pattern "fh-scenario-book-*.pdf"
-input_folder = "../worldhaven/images/books/frosthaven"
-output_folder= "../input/books/"
+input_folder = "/worldhaven/images/books/frosthaven"
+output_folder= "/input/books/"
 
 # check if output folder exists, if not create it
 if not os.path.exists(output_folder):

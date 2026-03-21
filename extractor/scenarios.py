@@ -7,7 +7,7 @@ from blocker import *
 # get a list of all the files in the input directory
 import os
 
-input_folder = "../input/books"
+input_folder = "./input/books"
 input_files = [f for f in os.listdir(input_folder) if f.startswith("stripped-scenario-book") and f.endswith(".pdf")]
 
 print("Input files:", input_files)
@@ -371,7 +371,7 @@ for entry in input_files[:1]:
                     pass
 
             # save this book to a json file
-            filename = "../input/scenarios/book.json"
+            filename = "./input/scenarios/book.json"
 
             with open(filename, "w") as f:
                 json.dump(book, f, indent=4, ensure_ascii=False)
@@ -381,7 +381,7 @@ for entry in input_files[:1]:
             print("Error processing file:", entry)
             print(e)
 
-input_file = "../input/scenarios/book.json"
+input_file = "./input/scenarios/book.json"
 book = json.load(open(input_file))
 
 # remove all items that don't have a number key, those are wrong
@@ -394,4 +394,3 @@ book.sort(key=lambda x: int(x["number"]))
 with open(input_file, "w") as f:
     json.dump(book, f, indent=4, ensure_ascii=False)
     f.close()
-

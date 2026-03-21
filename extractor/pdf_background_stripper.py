@@ -97,7 +97,7 @@ for book in input_books:
 		writer.add_page(page)
 
 	output_filename = book.replace("fh-scenario-book-", "stripped-scenario-book-")
-	with open(os.path.join(input_folder, output_filename), "wb") as f:
+	with open(os.path.join(output_folder, output_filename), "wb") as f:
 		writer.write(f)
 
 input_books = [f for f in os.listdir(input_folder) if f.startswith("fh-section-book-") and f.endswith(".pdf")]
@@ -119,5 +119,5 @@ for book in input_books:
 		writer.add_page(page)
 
 	output_filename = book.replace("fh-section-book-", "stripped-section-book-")
-	with open(os.path.join(input_folder, output_filename), "wb") as f:
+	with open(os.path.join(output_folder, output_filename), "wb") as f:
 		writer.write(f)

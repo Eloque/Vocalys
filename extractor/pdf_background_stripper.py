@@ -3,7 +3,6 @@ import os
 from pypdf import PdfReader, PdfWriter
 from pypdf.generic import NameObject, DictionaryObject, DecodedStreamObject
 
-
 def strip_backgrounds(resources, page_width, page_height, tolerance=0.95):
 	if not resources:
 		return
@@ -72,7 +71,13 @@ def add_background_color(writer, page, page_width, page_height, rgb=(0, 1, 0)):
 
 
 # find all the files in the input/books folder that match the pattern "fh-scenario-book-*.pdf"
-input_folder = "../input/books"
+input_folder = "../worldhaven/images/books/frosthaven"
+output_folder= "../input/books/"
+
+# check if output folder exists, if not create it
+if not os.path.exists(output_folder):
+	os.makedirs(output_folder)
+
 input_books = [f for f in os.listdir(input_folder) if f.startswith("fh-scenario-book-") and f.endswith(".pdf")]
 
 for book in input_books:
@@ -90,6 +95,10 @@ for book in input_books:
 		strip_background_annots(page)
 
 		writer.add_page(page)
+
+	output_filename = book.replace("fh-scenario-book-", "stripped-scenario-book-")
+	with open(os.path.join(input_folder, output_filename), "wb") as f:
+		writer.write(f)
 
 input_books = [f for f in os.listdir(input_folder) if f.startswith("fh-section-book-") and f.endswith(".pdf")]
 

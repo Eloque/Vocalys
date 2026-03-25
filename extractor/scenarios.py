@@ -1,7 +1,3 @@
-import json
-
-import pdfplumber
-
 from blocker import *
 
 # get a list of all the files in the input directory
@@ -13,7 +9,7 @@ input_files = [f for f in os.listdir(input_folder) if f.startswith("stripped-sce
 print("Input files:", input_files)
 book = list()
 
-for entry in input_files[:1]:
+for entry in input_files:
     pdf_file = os.path.join(input_folder, entry)
     pdf = pdfplumber.open(pdf_file)  # See note below
     print("Processing file:", entry)
@@ -60,7 +56,8 @@ for entry in input_files[:1]:
             # This is done by finding the header
             # Find the header based on the images
             page_type, header = find_header(images)
-            im.draw_rect(header, stroke="black", fill=TRANSPARENT, stroke_width=2)
+            if page_type != PageType.UNKNOWN:
+                im.draw_rect(header, stroke="black", fill=TRANSPARENT, stroke_width=2)
 
             # the analysis portion
             # if page_type != PageType.UNKNOWN:
@@ -371,7 +368,7 @@ for entry in input_files[:1]:
                     pass
 
             # save this book to a json file
-            filename = "./input/scenarios/book.json"
+            filename = "./input/books/scenario-book.json"
 
             with open(filename, "w") as f:
                 json.dump(book, f, indent=4, ensure_ascii=False)
@@ -381,7 +378,7 @@ for entry in input_files[:1]:
             print("Error processing file:", entry)
             print(e)
 
-input_file = "./input/scenarios/book.json"
+input_file = "./input/books/scenario-book.json"
 book = json.load(open(input_file))
 
 # remove all items that don't have a number key, those are wrong

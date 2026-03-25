@@ -497,16 +497,19 @@ def find_header(images, expected_height=91.68):
     scenario_page_header_height = 91.68
     continued_page_header_height = 48.00
 
-    type = PageType.UNKNOWN
+    try:
 
-    # Check if it's close, within 1 point of the heights above
-    if abs((best[3] - best[1]) - title_page_header_height) < 1.0:
-        type = PageType.TITLE
-    elif abs((best[3] - best[1]) - scenario_page_header_height) < 1.0:
-        type = PageType.SCENARIO
-    elif abs((best[3] - best[1]) - continued_page_header_height) < 1.0:
-        type = PageType.CONTINUED_SCENARIO
-    else:
+        # Check if it's close, within 1 point of the heights above
+        if abs((best[3] - best[1]) - title_page_header_height) < 1.0:
+            type = PageType.TITLE
+        elif abs((best[3] - best[1]) - scenario_page_header_height) < 1.0:
+            type = PageType.SCENARIO
+        elif abs((best[3] - best[1]) - continued_page_header_height) < 1.0:
+            type = PageType.CONTINUED_SCENARIO
+        else:
+            type = PageType.UNKNOWN
+
+    except:
         type = PageType.UNKNOWN
 
     return type, best  # (x0, top, x1, bottom) or None

@@ -9,7 +9,6 @@
 ![HuggingFace](https://img.shields.io/badge/HuggingFace-Models-yellow?logo=huggingface)
 ![PyTorch](https://img.shields.io/badge/PyTorch-TTS-red?logo=pytorch)
 
----
 🚧 **This project is very much a work in progress.**  
 Expect rough edges, breaking changes, and incomplete features.
 Expect the author to mess around, try things, get better, get worse and then in the end produce something worthwhile. Perhaps. 
@@ -23,7 +22,6 @@ A simple Flask app is provided then to select and playback scenario's and sectio
 
 No cloud required. Everything runs locally. You do need to generate the audio however. On a 3080, at 8 bts quantized, this takes serious time, do not expect realtime. It is possible to run on CPU. That takes about 3000 seconds, 50 minutes, for scarcely 2 minute of audio. That is on a 5900X 12 Core with 64 GB of memory
 
----
 ## ✨ Features (so far)
 
 - 📄 **PDF Reader & Analyzer**  
@@ -35,7 +33,6 @@ No cloud required. Everything runs locally. You do need to generate the audio ho
 - 🌐 **Flask Web Interface**  
   Simple UI to interact with the resulted audio
 
----
 ## 🧩 Components
 Vocalys is built as a modular PDF - TTS pipeline:
 
@@ -53,7 +50,6 @@ Vocalys is built as a modular PDF - TTS pipeline:
 - Trigger processing and playback
 - Designed for local usage
 
----
 
 ## 🧠 How it works
 
@@ -64,20 +60,19 @@ Vocalys is built as a modular PDF - TTS pipeline:
 5. Run worker. Wait a very long time. Though it does resume when interrupted and started again.
 6. Run the Flask App.
 
----
 ## 🎤 Voice & Audio
 - Audio is **not pre-generated**
 - Users must generate audio themselves
 - Supports using **custom voice samples**
 
 This allows for flexible and personalized narration.
----
+
 ## 🖥️ Local-first
 
 - Runs entirely on your machine
 - No external APIs required
 - Designed for privacy and control and cost saving
----
+
 ## 🚀 Quick Start
 
 ```
@@ -117,24 +112,14 @@ cd models
 huggingface-cli download bosonai/higgs-audio-v2-tokenizer --revision 9d4988fbd4ad07b4cac3a5fa462741a41810dbec --local-dir ./tokenizer_old --local-dir-use-symlinks False
 huggingface-cli download bosonai/higgs-audio-v2-generation-3B-base --revision 10840182ca4ad5d9d9113b60b9bb3c1ef1ba3f84 --local-dir ./model_old --local-dir-use-symlinks False
 ```
----
 
 ## 🧪 Intended Use
 - Frosthaven narration
 - Experimentation with local TTS pipelines
 
----
-## ⚠️ Disclaimer
-This is a personal, experimental project.
-
-- Not production ready
-- Not optimized
-- Not for profit, only fun.
----
 ## 📜 License
 MIT License
 
----
 ## 💡 Notes
 
 This project is part exploration, part tool — built to learn, experiment, and push local AI narration forward. It's main purpose is to provide me with an outlet for my programming hobbies.

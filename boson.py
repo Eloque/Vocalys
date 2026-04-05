@@ -58,19 +58,43 @@ def initialize_synthesization():
     device = get_device("auto")
     device_id = None if device == "cpu" else int(device.split(":")[-1])
 
-    # audio_tokenizer = load_higgs_audio_tokenizer("bosonai/higgs-audio-v2-tokenizer", device=device)
-    audio_tokenizer = load_higgs_audio_tokenizer("bosonai/higgs-audio-v2-tokenizer", device=get_device("cpu"))
+    #device_id = None
 
-    # To prevent multiple loadings, run this once
-    model_client = HiggsAudioModelClient(
-        model_path="bosonai/higgs-audio-v2-generation-3B-base",
-        audio_tokenizer=audio_tokenizer,
-        device_id=device_id,
-        max_new_tokens=2048, # 378, # $4096 / 8,
-        use_static_kv_cache=False,
-        use_quantization=True,
-        quantization_bits=8,
-    )
+    # audio_tokenizer = load_higgs_audio_tokenizer("bosonai/higgs-audio-v2-tokenizer", device=device)
+    # audio_tokenizer = load_higgs_audio_tokenizer("bosonai/higgs-audio-v2-tokenizer", device=get_device("cpu"))
+
+    audio_tokenizer = load_higgs_audio_tokenizer("./faster-higgs-audio/models/tokenizer_old", device=get_device("cpu"))
+
+    on_cpu = True
+
+    if on_cpu:
+
+        device = get_device("cpu")
+
+        # To prevent multiple loadings, run this once
+        model_client = HiggsAudioModelClient(
+            #model_path="bosonai/higgs-audio-v2-generation-3B-base",
+            model_path="./faster-higgs-audio/models/model_old",
+            audio_tokenizer=audio_tokenizer,
+            device_id=None,
+            max_new_tokens=4096, # 2048, # 378, # $4096 / 8,
+            use_static_kv_cache=True,
+            device="cpu",
+        )
+
+    else:
+        # To prevent multiple loadings, run this once
+        model_client = HiggsAudioModelClient(
+            #model_path="bosonai/higgs-audio-v2-generation-3B-base",
+            model_path="./faster-higgs-audio/models/model_old",
+            audio_tokenizer=audio_tokenizer,
+            device_id=device_id,
+            max_new_tokens=4096, # 2048, # 378, # $4096 / 8,
+            use_static_kv_cache=True,
+            device=device,
+            use_quantization=True,
+            quantization_bits=4,
+        )
 
     return model_client, audio_tokenizer
 

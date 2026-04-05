@@ -204,6 +204,12 @@ def synthesization_loop(client_model,text, voice, filename):
 
 def main():
 
+    scenarios()
+    # sections()
+    # sampler()
+
+def sections():
+
     logger.info(f"Starting Vocalis - Synthesizing Audio")
     # Load models
     client_model, tokenizer = initialize_synthesization()
@@ -213,7 +219,165 @@ def main():
 
     # Try to load voices
     try:
-        raise Exception("test")
+        # raise Exception("test")
+        voices = json.load(open("./voices/voices.json"))
+        voices = voices["voices"]
+        sync_voice_prompts()
+    except:
+        logger.info("No voices found, using default voice")
+        voices = list()
+        voices.append({"name": "Default", "style": None})
+
+    logger.info(f"Creating context for voices")
+
+    # generate the contexts once, to save time later
+    generate_context_per_voice(voices, tokenizer)
+
+    input_file = "./input/scenarios/sections_book.json"
+    book = json.load(open(input_file))
+
+    # check if the output folder exists, if not create it
+    output_folder = "./output/sections"
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+
+    for entry in book[:]:
+
+        try:
+
+            if entry["number"] != "29.3":
+                continue
+
+            section_folder = os.path.join(output_folder, f"{entry['number']}")
+
+            # Write the manifest file
+            manifest_file = os.path.join(section_folder, "manifest.json")
+
+            # Check if the manifest file already exists, if it does, read it and update it with the new manifest, otherwise create a new manifest file
+            if os.path.exists(manifest_file):
+                with open(manifest_file, "r", encoding="utf-8") as f:
+                    manifest = json.load(f)
+            else:
+                manifest = {
+                    "section": {
+                        "number": entry["title"],
+                        "text" : ""
+                    }
+                }
+
+            for section in entry["sections"]:
+                if section["header"] == "Continuation" or section["header"] == "Conclusion":
+                    manifest["section"]["text"] = section["text"]
+
+            for voice in voices:
+                # Creat the folder that is needed for the voice
+                voice_folder = os.path.join(section_folder, voice["name"])
+                if not os.path.exists(voice_folder):
+                    os.makedirs(voice_folder)
+
+                filename = "Section.wav"
+                filename = os.path.join(voice_folder, filename)
+
+                # The main text
+                result, chunked_size_success = synthesization_loop(client_model,
+                                                                   manifest["section"]["text"] ,
+                                                                   voice,
+                                                                   filename)
+
+                if result:
+                    audio = {
+                        "voice": voice["name"],
+                        "file": f"{voice['name']}/Section.wav",
+                        "chunk_size": chunked_size_success,
+                        "creation_time": datetime.datetime.now().isoformat()
+                    }
+
+                    # check if the manifest scenario has an audio list
+                    if "audio" not in manifest["section"]:
+                        manifest["section"]["audio"] = list()
+
+                    manifest["section"]["audio"].append(audio)
+
+                    with open(manifest_file, "w", encoding="utf-8") as f:
+                        json.dump(manifest, f, indent=2, ensure_ascii=False)
+
+        except Exception as e:
+            logger.error(e)
+
+#3
+def sampler():
+
+    logger.info(f"Starting Vocalis - Synthesizing Audio")
+    # Load models
+    client_model, tokenizer = initialize_synthesization()
+
+    print(torch.cuda.is_available())
+    print(torch.cuda.memory_allocated() / 1024 ** 2, torch.cuda.memory_reserved() / 1024 ** 2)
+
+    logger.info(f"Creating context for voice")
+
+    elarion_prompt = """The narrator is Elaria, a female voice.
+
+Her voice is soft, warm, and gently resonant.
+It is clearly feminine, with a smooth and slightly airy quality.
+
+Her tone is calm and controlled, but never heavy or deep.
+Avoid a masculine or overly low-pitched voice.
+
+Pacing is slow and natural.
+Sentences flow smoothly with gentle pauses.
+
+Consonants are soft and rounded.
+Sibilance is light and controlled.
+
+Emotion is subtle and restrained.
+No theatrical delivery, no sharpness.
+
+The voice should feel warm, calm, and slightly ethereal, like a quiet and confident female storyteller."""
+
+    voice = dict()
+    voice["name"] = "Elaria"
+    voice["style"] = elarion_prompt
+    voice["chunk_size"] = 1200
+
+    messages, audio_ids = prepare_generation_context(
+        scene_prompt=voice["style"],
+        ref_audio=None,
+        ref_audio_in_system_message=True,
+        audio_tokenizer=tokenizer,
+        speaker_tags=[]
+    )
+
+    voice["temperature"] = None
+    voice["top_k"] = None
+    voice["top_p"] = None
+
+    voice["messages"] = messages
+    voice["audio_ids"] = audio_ids
+
+    filename = "Voice.wav"
+    sample = "The frost clung to the walls of Frosthaven"
+
+    # The main text
+    result, chunked_size_success = synthesization_loop(client_model,
+                                                       sample,
+                                                       voice,
+                                                       filename)
+
+
+
+def scenarios():
+
+    logger.info(f"Starting Vocalis - Synthesizing Audio")
+    # Load models
+    client_model, tokenizer = initialize_synthesization()
+
+    print(torch.cuda.is_available())
+    print(torch.cuda.memory_allocated() / 1024 ** 2, torch.cuda.memory_reserved() / 1024 ** 2)
+
+    # Try to load voices
+    try:
+        # raise Exception("test")
         voices = json.load(open("./voices/voices.json"))
         voices = voices["voices"]
         sync_voice_prompts()
@@ -234,7 +398,7 @@ def main():
     # voices = [voices[0], voices[3]]
 
     # check if the output folder exists, if not create it
-    output_folder = "./output"
+    output_folder = "./output/scenarios"
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
@@ -252,6 +416,9 @@ def main():
 
                 case PageType.SCENARIO:
                     logger.info(f"Scenario: {entry['number']} {entry['title']}")
+
+                    # if entry["number"] != "67":
+                    #     continue
 
                     # pad number to be 3 digits
                     number = str(entry['number']).zfill(3)
@@ -302,6 +469,12 @@ def main():
                                 "text": section["text"],
                                 "audio": list()
                             })
+                        else:
+                            # make sure the text is still correct
+                            for clip in manifest["clips"]:
+                                if clip["header"] == section["header"]:
+                                    clip["text"] = section["text"]
+
 
                     # Per voice, synthesize the audio for the sections to voice
                     for voice in voices:
@@ -311,38 +484,19 @@ def main():
                             os.makedirs(voice_folder)
 
                         # The title
-                        filename = "Title.wav"
-                        filename = os.path.join(voice_folder, filename)
-
-                        result, chunked_size_success = synthesization_loop(client_model,
-                                                                           entry["title"].upper(),
-                                                                           voice,
-                                                                           filename)
-
-                        if result:
-                            audio = {
-                                "voice": voice["name"],
-                                "file": f"{voice['name']}/Title.wav",
-                                "chunk_size": chunked_size_success,
-                                "creation_time": datetime.datetime.now().isoformat()
-                            }
-
-                            # check if the manifest scenario has an audio list
-                            if "audio" not in manifest["scenario"]:
-                                manifest["scenario"]["audio"] = list()
-
-                            manifest["scenario"]["audio"].append(audio)
-
-                            with open(manifest_file, "w", encoding="utf-8") as f:
-                                json.dump(manifest, f, indent=2, ensure_ascii=False)
+                        # filename = "Title.wav"
+                        # filename = os.path.join(voice_folder, filename)
 
                         for clip in clips:
+
                             filename = f"{clip['header']}.wav"
                             filename = os.path.join(voice_folder, filename)
 
+                            combined_text = "..." + entry["title"] + "\n...\n" + clip["text"]
+
                             # The main text
                             result, chunked_size_success = synthesization_loop(client_model,
-                                                                               clip["text"],
+                                                                               combined_text,
                                                                                voice,
                                                                                filename)
 
@@ -366,9 +520,6 @@ def main():
 
                                 with open(manifest_file, "w", encoding="utf-8") as f:
                                     json.dump(manifest, f, indent=2, ensure_ascii=False)
-
-                                exit()
-
 
         except Exception as e:
             logger.error(e)

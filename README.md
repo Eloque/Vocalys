@@ -8,14 +8,14 @@
 ![Audio](https://img.shields.io/badge/Audio-Processing-blue)
 ![HuggingFace](https://img.shields.io/badge/HuggingFace-Models-yellow?logo=huggingface)
 ![PyTorch](https://img.shields.io/badge/PyTorch-TTS-red?logo=pytorch)
----
-## ⚠️ Status: Experimental
 
-🚧 **This project is very much a work in progress.**  
 ---
+
+## ⚠️ Status: Experimental
+🚧 **This project is very much a work in progress.**  
+
 Expect rough edges, breaking changes, and incomplete features.
 Expect the author to mess around, try things, get better, get worse and then in the end produce something worthwhile. Perhaps. 
-
 
 ## 📚 What is Vocalys?
 Vocalys is an experimental, local-first AI narration tool designed for **Frosthaven** narration.

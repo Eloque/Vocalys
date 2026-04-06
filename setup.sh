@@ -53,7 +53,7 @@ source .venv/bin/activate
 echo "📦 Installing Python dependencies..."
 
 uv pip install -r faster-higgs-audio/requirements.txt -e faster-higgs-audio bitsandbytes
-uv pip install pypdf pdfplumber scikit-image huggingface-hub patches
+uv pip install pypdf pdfplumber scikit-image huggingface-hub
 
 # ─────────────────────────────────────────────
 # 🤗 Models

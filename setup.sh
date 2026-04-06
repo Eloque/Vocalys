@@ -62,6 +62,17 @@ uv pip install pypdf pdfplumber scikit-image huggingface-hub
 mkdir -p models
 cd models
 
+hf_download() {
+	local repo="$1"
+	local revision="$2"
+	local target_dir="$3"
+
+	hf download "$repo" \
+		--revision "$revision" \
+		--local-dir "$target_dir" \
+		--local-dir-use-symlinks False
+}
+
 download_if_missing() {
 	local target_dir="$1"
 	local repo="$2"
@@ -74,11 +85,7 @@ download_if_missing() {
 
 	printf "[DL] %s -> %s\n" "$repo" "$target_dir"
 
-	if ! huggingface-cli download "$repo" \
-		--revision "$revision" \
-		--local-dir "$target_dir" \
-		--local-dir-use-symlinks False
-	then
+	if ! hf_download "$repo" "$revision" "$target_dir"; then
 		printf "[ERR] Failed to download %s\n" "$repo" >&2
 		return 1
 	fi

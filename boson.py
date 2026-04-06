@@ -58,14 +58,9 @@ def initialize_synthesization():
     device = get_device("auto")
     device_id = None if device == "cpu" else int(device.split(":")[-1])
 
-    #device_id = None
-
-    # audio_tokenizer = load_higgs_audio_tokenizer("bosonai/higgs-audio-v2-tokenizer", device=device)
-    # audio_tokenizer = load_higgs_audio_tokenizer("bosonai/higgs-audio-v2-tokenizer", device=get_device("cpu"))
-
     audio_tokenizer = load_higgs_audio_tokenizer("./faster-higgs-audio/models/tokenizer_old", device=get_device("cpu"))
 
-    on_cpu = True
+    on_cpu = False
 
     if on_cpu:
 

@@ -43,7 +43,7 @@ git submodule update --init --recursive faster-higgs-audio/
 
 if [ ! -d ".venv" ]; then
 echo "🐍 Creating virtual environment..."
-uv venv
+uv venv --python 3.10
 else
 echo "✅ Virtual environment already exists"
 fi
@@ -53,7 +53,7 @@ source .venv/bin/activate
 echo "📦 Installing Python dependencies..."
 
 uv pip install -r faster-higgs-audio/requirements.txt -e faster-higgs-audio bitsandbytes
-uv pip install pypdf pdfplumber scikit-image huggingface-hub
+uv pip install pypdf pdfplumber scikit-image huggingface-hub patches
 
 # ─────────────────────────────────────────────
 # 🤗 Models

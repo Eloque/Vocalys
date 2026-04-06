@@ -1,0 +1,13 @@
+{
+  "voices": [
+    {
+      "name": "first",
+      "temperature": 0.88,
+      "top_k": 110,
+      "top_p": 0.96,
+      "chunk_size": 540,
+      "primer": "There are things in this world that should never be spoken of.",
+      "style": "Narrate with controlled intensity. Maintain steady pacing, but accelerate during action sequences. When a sentence is short and declarative, slow slightly and add weight. Pause briefly before final decisive statements. Avoid neutral tone on climactic lines."
+    },
+  ]
+}

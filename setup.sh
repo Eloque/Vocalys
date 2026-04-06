@@ -63,23 +63,28 @@ uv pip install pypdf pdfplumber scikit-image huggingface-hub
 mkdir -p models
 cd models
 
-download_if_missing () {
-local target_dir=$1
-local repo=$2
-local revision=$3
+download_if_missing() {
+	local target_dir="$1"
+	local repo="$2"
+	local revision="$3"
 
-```
-if [ -d "$target_dir" ]; then
-	echo "✅ $target_dir already exists, skipping"
-else
-	echo "⬇️ Downloading $repo → $target_dir"
-	huggingface-cli download "$repo" \
+	if [ -d "$target_dir" ]; then
+		printf "[OK] %s already exists, skipping\n" "$target_dir"
+		return 0
+	fi
+
+	printf "[DL] %s -> %s\n" "$repo" "$target_dir"
+
+	if ! huggingface-cli download "$repo" \
 		--revision "$revision" \
 		--local-dir "$target_dir" \
 		--local-dir-use-symlinks False
-fi
-```
+	then
+		printf "[ERR] Failed to download %s\n" "$repo" >&2
+		return 1
+	fi
 
+	printf "[OK] Download complete: %s\n" "$target_dir"
 }
 
 download_if_missing "tokenizer_old" "bosonai/higgs-audio-v2-tokenizer" "9d4988fbd4ad07b4cac3a5fa462741a41810dbec"

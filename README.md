@@ -80,7 +80,7 @@ This allows for flexible and personalized narration.
 git clone https://github.com/yourname/vocalys.git
 cd vocalys
 
-# Install external repos, don't pull everyting, that is huge!
+# Install external repos, don't pull everything, that is huge!
 git clone --filter=blob:none --no-checkout https://github.com/any2cards/worldhaven.git
 cd worldhaven
 git sparse-checkout init --cone

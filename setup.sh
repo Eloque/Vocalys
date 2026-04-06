@@ -13,7 +13,6 @@ echo "🎙️ Setting up Vocalys..."
 
 command -v git >/dev/null || { echo "❌ git not found"; exit 1; }
 command -v uv >/dev/null || { echo "❌ uv not found (pip install uv)"; exit 1; }
-command -v huggingface-cli >/dev/null || { echo "❌ huggingface-cli not found (pip install huggingface-hub)"; exit 1; }
 
 # ─────────────────────────────────────────────
 # 📁 Clone worldhaven (sparse)

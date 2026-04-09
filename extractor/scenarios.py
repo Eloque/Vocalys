@@ -1,7 +1,7 @@
 from blocker import *
 
 # get a list of all the files in the input directory
-import os
+import os 
 
 input_folder = "./input/books"
 input_files = [f for f in os.listdir(input_folder) if f.startswith("stripped-scenario-book") and f.endswith(".pdf")]

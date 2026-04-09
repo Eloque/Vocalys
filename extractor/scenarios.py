@@ -1,7 +1,7 @@
 from blocker import *
 
 # get a list of all the files in the input directory
-import os 
+import os
 
 input_folder = "./input/books"
 input_files = [f for f in os.listdir(input_folder) if f.startswith("stripped-scenario-book") and f.endswith(".pdf")]
@@ -210,8 +210,15 @@ for entry in input_files:
                     for col in column_list:
                         im.draw_rect(col, stroke="blue", fill=TRANSPARENT, stroke_width=1)
 
+                    im.save(f"processing.png")
+
                     # We will exclude all words that are in the header
                     words = filter_words(words, [bbox_to_rect(header)])
+
+                    # We will need to exclude all words that are ABOVE the header
+                    header_rect = bbox_to_rect(header)
+                    exclude = [w for w in words if w["top"] < header_rect["top"]]
+                    words = filter_words(words, exclude)
 
                     # Remove the phrase "Continued on next page" if it exists
                     words = remove_phrase(words, ["–", "Continued", "on", "next", "page."])

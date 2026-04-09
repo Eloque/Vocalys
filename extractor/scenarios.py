@@ -213,6 +213,9 @@ for entry in input_files:
                     # We will exclude all words that are in the header
                     words = filter_words(words, [bbox_to_rect(header)])
 
+                    # Remove the phrase "Continued on next page" if it exists
+                    words = remove_phrase(words, ["–", "Continued", "on", "next", "page."])
+
                     # Split the words into headers and paragraphs
                     paragraph_words, header_words = get_headers_paragraphs(words)
                     # Remove those headers that are actually just the "x1", "x2", those are loot indicators

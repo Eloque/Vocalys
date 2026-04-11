@@ -204,9 +204,49 @@ def synthesization_loop(client_model,text, voice, filename):
 
 def main():
 
-    scenarios()
+    # scenarios()
     # sections()
     # sampler()
+
+    introductions()
+
+def introductions():
+
+    logger.info(f"Starting Vocalis - Synthesizing Audio")
+    # Load models
+    client_model, tokenizer = initialize_synthesization()
+
+    print(torch.cuda.is_available())
+    print(torch.cuda.memory_allocated() / 1024 ** 2, torch.cuda.memory_reserved() / 1024 ** 2)
+
+    voices = json.load(open("./voices/voices.json"))
+    voices = voices["voices"]
+    sync_voice_prompts()
+
+    generate_context_per_voice(voices, tokenizer)
+
+    # only do the the first two items from voices
+    voices = voices[:2]
+
+    # for each voice, create a folder for it
+    for voice in voices:
+        # Creat the folder that is needed for the voice
+        voice_folder = os.path.join("./output/introductions", voice["name"])
+        if not os.path.exists(voice_folder):
+            os.makedirs(voice_folder)
+
+        filename = f"Introduction-{voice['name']}.wav"
+        filename = os.path.join(voice_folder, filename)
+
+        # The main text
+        result, chunked_size_success = synthesization_loop(client_model,
+                                                           voice["introduction"],
+                                                           voice,
+                                                           filename)
+
+        if result:
+            print(f"Audio file saved to {filename}")
+
 
 def sections():
 
@@ -241,11 +281,13 @@ def sections():
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
+    sections_to_run = ["106.4"]
+
     for entry in book[:]:
 
         try:
 
-            if entry["number"] != "29.3":
+            if entry["number"] not in sections_to_run:
                 continue
 
             section_folder = os.path.join(output_folder, f"{entry['number']}")
@@ -415,10 +457,10 @@ def scenarios():
                     continue
 
                 case PageType.SCENARIO:
-                    logger.info(f"Scenario: {entry['number']} {entry['title']}")
+                    # logger.info(f"Scenario: {entry['number']} {entry['title']}")
 
-                    # if entry["number"] != "67":
-                    #     continue
+                    if entry["number"] != "68":
+                        continue
 
                     # pad number to be 3 digits
                     number = str(entry['number']).zfill(3)
@@ -486,7 +528,7 @@ def scenarios():
                         # The title
                         # filename = "Title.wav"
                         # filename = os.path.join(voice_folder, filename)
-
+                        print("there is a clip")
                         for clip in clips:
 
                             filename = f"{clip['header']}.wav"

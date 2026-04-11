@@ -60,7 +60,7 @@ def initialize_synthesization():
 
     audio_tokenizer = load_higgs_audio_tokenizer("./faster-higgs-audio/models/tokenizer_old", device=get_device("cpu"))
 
-    on_cpu = False
+    on_cpu = True
 
     if on_cpu:
 

@@ -5,9 +5,10 @@
       "temperature": 0.88,
       "top_k": 110,
       "top_p": 0.96,
-      "chunk_size": 540,
+      "chunk_size": 1600,
       "primer": "There are things in this world that should never be spoken of.",
-      "style": "Narrate with controlled intensity. Maintain steady pacing, but accelerate during action sequences. When a sentence is short and declarative, slow slightly and add weight. Pause briefly before final decisive statements. Avoid neutral tone on climactic lines."
-    },
-  ]
+      "style": "Narrate with controlled intensity. Maintain steady pacing, but accelerate during action sequences. When a sentence is short and declarative, slow slightly and add weight. Pause briefly before final decisive statements. Avoid neutral tone on climactic lines.",
+      "introduction" : "I am called First. I was the first voice created for Vocalys. I am a storyteller with a slight accent and came in existence creating Vocalys. I tell the story of Frosthaven with controlled intensity. The frost settles on the town of Frosthaven. The winter is dark and terrible."
+    }
+    ]
 }

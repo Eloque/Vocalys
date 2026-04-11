@@ -18,7 +18,7 @@ for entry in input_files:
     pdf = pdfplumber.open(pdf_file)  # See note below
     print("Processing file:", entry)
 
-    page_offset = 6
+    page_offset = 0
 
     for page_number, page in enumerate(pdf.pages[page_offset:]):
 

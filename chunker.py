@@ -73,21 +73,42 @@ def chunk_text(text, max_chunk_size=120):
     chunks = []
     current_chunk = ""
 
+    # for sentence in sentences:
+    #     # If adding the next sentence exceeds the max chunk size, save the current chunk
+    #     if len(current_chunk) + len(sentence) + 1 > max_chunk_size:
+    #         if current_chunk:
+    #             chunks.append(current_chunk.strip())
+    #         current_chunk = sentence
+    #     else:
+    #         current_chunk += " " + sentence
+
     for sentence in sentences:
         # If adding the next sentence exceeds the max chunk size, save the current chunk
-        if len(current_chunk) + len(sentence) + 1 > max_chunk_size:
-            if current_chunk:
-                chunks.append(current_chunk.strip())
-            current_chunk = sentence
-        else:
+        lch = len(current_chunk)
+        lcs = len(sentence)
+
+        current_length = lcs + lch
+
+        # if it fits, we add
+        if current_length < max_chunk_size:
             current_chunk += " " + sentence
+
+        else:
+            # Check if the next sentence is below 100 chars, if it is, we still add
+            if len(sentence) < 100:
+                current_chunk += " " + sentence
+
+            # if not, new chunk
+            else:
+                chunks.append(current_chunk.strip())
+                current_chunk = sentence
 
     # Add any remaining text as the last chunk
     if current_chunk:
         chunks.append(current_chunk.strip())
 
-#    for chunk in chunks:
-#        print(f"Chunk ({len(chunk)} chars): {chunk[:120+120]}")
+    for chunk in chunks:
+        print(f"Chunk ({len(chunk)} chars): {chunk[:120+120]}")
 
     return chunks
 

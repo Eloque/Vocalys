@@ -7,7 +7,7 @@ from blocker import *
 # get a list of all the files in the input directory
 import os
 
-input_folder = "../input/books"
+input_folder = "./input/books"
 input_files = [f for f in os.listdir(input_folder) if f.startswith("stripped-section-book") and f.endswith(".pdf")]
 
 print("Input files:", input_files)
@@ -29,7 +29,7 @@ for entry in input_files:
             im = page.to_image(72)
             pil_img = im.original
 
-            pil_img.save(f"output/processing.png")
+            pil_img.save(f"processing.png")
 
             # get the width of the page
             page_width = page.width
@@ -53,9 +53,8 @@ for entry in input_files:
                 bottom = image.get("bottom", image["y1"])
                 image["bbox"] = (x0, top, x1, bottom)
 
-            # draw_images(images, im)
-            # im.save(f"output/processing.png")
-
+            draw_images(images, im)
+            im.save(f"processing.png")
             header_images = list()
 
             # go through all images
@@ -69,7 +68,8 @@ for entry in input_files:
                 delta = image["bottom"] - image["top"]
                 if delta < 20:
                     # use a regex to check if the first word is a number
-                    if text and re.match(r'^\d+\.\d+$', text.split()[0]):
+                    # if text and re.match(r'^\d+\.\d+$', text.split()[0]):
+                    if text and re.match(r'^\d+\.\d+\D*$', text.split()[0]):
                         image["section"] = text
                         header_images.append(image)
 
@@ -122,7 +122,7 @@ for entry in input_files:
                 blocks.append(new_block)
 
             draw_sections(blocks, im)
-            im.save(f"output/processing.png")
+            im.save(f"processing.png")
 
             # At this point we got the blocks. We should go over them block by block
             # First get the min x on the blocks
@@ -154,7 +154,7 @@ for entry in input_files:
                              fill=TRANSPARENT,
                              stroke_width=1)
 
-            im.save(f"output/processing.png")
+            im.save(f"processing.png")
 
             for block in blocks:
                 # print(block["section"])
@@ -163,11 +163,15 @@ for entry in input_files:
                 # For now, this needs splitting
                 text = block["section"]
 
+                is_continued = '(cont.)' in text
+                text = text.replace('(cont.)', '').strip()
+
                 m = re.match(r'^([\d.]+)\s*•\s*(.*?)\s*(?:\((\d+)\))?$', text)
 
                 section["number"] = m.group(1)
                 section["title"] = m.group(2)
                 section["reference"] = m.group(3)
+                section["continued"] = is_continued
 
                 section_words = words_in_bbox(words, block["bbox"])
 
@@ -177,6 +181,10 @@ for entry in input_files:
                 exclude = bbox_to_rect(exclude)
 
                 section_words = filter_words(section_words, [exclude])
+
+                # remove the continued on next page bit
+                section_words = remove_phrase(section_words, ["–", "Continued", "on", "next", "page."])
+
                 text = words_to_text(section_words)
 
                 paragraph_words, header_words = get_headers_paragraphs(section_words)
@@ -233,10 +241,10 @@ for entry in input_files:
 
                 sections_book.append(section)
 
-                im.save(f"output/processing.png")
+                im.save(f"processing.png")
 
             # save this book to a json file
-            filename = "../input/scenarios/sections_book.json"
+            filename = "./input/books/sections_book.json"
 
             with open(filename, "w") as f:
                 json.dump(sections_book, f, indent=4, ensure_ascii=False)
@@ -247,14 +255,14 @@ for entry in input_files:
             print(page_number)
             print(e)
 
-input_file = "../input/scenarios/sections_book.json"
+input_file = "./input/books/sections_book.json"
 book = json.load(open(input_file))
 
 # remove all items that don't have a number key, those are wrong
 book = [b for b in book if "number" in b]
 
 # sort on number key
-book.sort(key=lambda x: int(x["number"]))
+book.sort(key=lambda x: float(x["number"]))
 
 # save this book to a json file
 with open(input_file, "w") as f:

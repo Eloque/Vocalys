@@ -3,12 +3,14 @@
 <head>
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width,initial-scale=1">
-	<title>{{ manifest.scenario.number }} - {{ manifest.scenario.title }}</title>
+	<title>{{ manifest.scenario.number }}</title>
 </head>
 <body>
 	<a href="/">Back</a>
 
-	<h1>{{ manifest.scenario.number }} - {{ manifest.scenario.title }}</h1>
+	<h1>{{ manifest.scenario.title }}</h1>
+
+	<p>{{ manifest.scenario.text }}</p>
 
 	<label for="voice">Voice</label><br>
 	<select id="voice">
@@ -17,20 +19,21 @@
 		{% endfor %}
 	</select>
 
-	<h2>Clips</h2>
+	<h2>Audio</h2>
 
 	<audio id="player" controls preload="none"></audio>
 
 	<div id="clips">
 		{% for clip in manifest.clips %}
-			<button
-				type="button"
-				style="display:block;margin:8px 0"
-				data-header="{{ clip.header }}"
-				{% for voice, url in clip.audio_urls.items() %}
-					data-{{ voice }}="{{ url }}"
-				{% endfor %}
-			>{{ clip.header }}</button>
+            <button
+                type="button"
+                style="display:block;margin:8px 0"
+                data-header="{{ clip.header }}"
+                data-audio='{{ clip.audio_urls | tojson }}'
+            >
+                ▶ {{ clip.header }}
+            </button>
+
 		{% endfor %}
 	</div>
 
@@ -38,13 +41,15 @@
 		const player = document.getElementById("player");
 		const voiceSelect = document.getElementById("voice");
 
-		function playFromButton(btn) {
-			const voice = voiceSelect.value;
-			const url = btn.dataset[voice];
-			if (!url) return;
-			player.src = url;
-			player.play();
-		}
+        function playFromButton(btn) {
+        	const voice = voiceSelect.value;
+	        const audioMap = JSON.parse(btn.dataset.audio);
+	        const url = audioMap[voice];
+	        if (!url) return;
+	            player.src = url;
+	            player.play();
+
+            }
 
 		document.getElementById("clips").addEventListener("click", (e) => {
 			if (e.target.tagName === "BUTTON") {

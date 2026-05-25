@@ -26,5 +26,13 @@
 		<button type="submit">Open</button>
 	</form>
 
+    <label for="number">Section</label><br>
+    <select id="number" onchange="if (this.value) window.location.href = '/section/' + this.value;">
+        <option value="">-- choose --</option>
+        {% for p in sections %}
+            <option value="{{ p.number }}">{{ p.display }}</option>
+        {% endfor %}
+    </select>
+
 </body>
 </html>

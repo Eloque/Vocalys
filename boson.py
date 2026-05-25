@@ -72,7 +72,7 @@ def initialize_synthesization():
             model_path="./faster-higgs-audio/models/model_old",
             audio_tokenizer=audio_tokenizer,
             device_id=None,
-            max_new_tokens=4096, # 2048, # 378, # $4096 / 8,
+            max_new_tokens=768, #4096, # 2048, # 378, # $4096 / 8,
             use_static_kv_cache=True,
             device="cpu",
         )
@@ -84,11 +84,11 @@ def initialize_synthesization():
             model_path="./faster-higgs-audio/models/model_old",
             audio_tokenizer=audio_tokenizer,
             device_id=device_id,
-            max_new_tokens=4096, # 2048, # 378, # $4096 / 8,
-            use_static_kv_cache=True,
+            max_new_tokens=768, # 4096, # 2048, # 378, # $4096 / 8,
+            use_static_kv_cache=False,
             device=device,
             use_quantization=True,
-            quantization_bits=4,
+            quantization_bits=8,
         )
 
     return model_client, audio_tokenizer

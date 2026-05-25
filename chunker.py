@@ -1,7 +1,19 @@
 # this take text file, and splits it into chunks for processing
 import re
+import unicodedata
+
+
+def normalize_text(text):
+	text = unicodedata.normalize("NFKC", text)
+	text = text.replace("’", "'")
+	text = text.replace("“", '"').replace("”", '"')
+	text = text.replace("–", "-").replace("—", "-")
+	return text
 
 def new_chunk_text(text, max_chunk_size=900, overlap_chars=0):
+
+    text = normalize_text(text)
+
     text = re.sub(r'\s+', ' ', text).strip()  # normalize all whitespace
 
     # Split on punctuation + any whitespace
@@ -47,6 +59,12 @@ def chunk_text(text, max_chunk_size=120):
         List[str]: A list of text chunks.
     """
 
+    print(text)
+
+    text = normalize_text(text)
+
+    print(text)
+
     ## Thing is, the text is from PDF and has a lot of newlines in the middle of sentences.
     ## So first we replace newlines with spaces
     text = text.replace('\n', ' ')
@@ -58,29 +76,48 @@ def chunk_text(text, max_chunk_size=120):
     text = re.sub(r"\s*[—–]\s*", "!", text)
     # text = re.sub(r"\s*[—–]\s*", ", ", text)
 
-    # There are specific words the defy pronunciation, split them for the TTS to pronounce them better
+    # There are specific words that defy pronunciation, split them for the TTS to pronounce them better
     text = text.replace("Snowspeaker", "Snow Speaker")
     text = text.replace("Icespeaker", "Ice Speaker")
+    # text = text.replace("Guardian", "Guard-ian")
 
-    # Split text into sentences using regex
-    # sentences = re.split(r'(?<=[.!?]) +', text)
+    text = text.replace("...", "<spacer>")
 
-    sentences = re.split(r'(?:(?<=[.!?])|(?<=[.!?]["\”’]))\s+(?=[A-Z"“])', text)
+    ## new splitter
+    sentences = []
 
-#    for sentence in sentences:
-#        print(sentence)
+    current = []
+    inside_quotes = False
+
+    for char in text:
+        current.append(char)
+
+        if char in ['"']:
+            inside_quotes = not inside_quotes
+
+        if not inside_quotes and char in ".!?":
+            sentence = "".join(current).strip()
+
+            if sentence:
+                sentences.append(sentence)
+
+            current = []
+
+    # leftover
+    leftover = "".join(current).strip()
+    if leftover:
+        sentences.append(leftover)
+
+    spacers = []
+
+    for sentence in sentences:
+        sentence = sentence.replace("<spacer>", "...")
+        spacers.append(sentence)
+
+    sentences = spacers
 
     chunks = []
     current_chunk = ""
-
-    # for sentence in sentences:
-    #     # If adding the next sentence exceeds the max chunk size, save the current chunk
-    #     if len(current_chunk) + len(sentence) + 1 > max_chunk_size:
-    #         if current_chunk:
-    #             chunks.append(current_chunk.strip())
-    #         current_chunk = sentence
-    #     else:
-    #         current_chunk += " " + sentence
 
     for sentence in sentences:
         # If adding the next sentence exceeds the max chunk size, save the current chunk
@@ -90,13 +127,16 @@ def chunk_text(text, max_chunk_size=120):
         current_length = lcs + lch
 
         # if it fits, we add
-        if current_length < max_chunk_size:
+        if current_length < max_chunk_size or lch == 0:
             current_chunk += " " + sentence
 
         else:
             # Check if the next sentence is below 100 chars, if it is, we still add
             if len(sentence) < 100:
                 current_chunk += " " + sentence
+                # but we also start a new chunk
+                chunks.append(current_chunk.strip())
+                current_chunk = ""
 
             # if not, new chunk
             else:
@@ -108,7 +148,7 @@ def chunk_text(text, max_chunk_size=120):
         chunks.append(current_chunk.strip())
 
     for chunk in chunks:
-        print(f"Chunk ({len(chunk)} chars): {chunk[:120+120]}")
+        print(f"Chunk ({len(chunk)} chars): {chunk}")
 
     return chunks
 

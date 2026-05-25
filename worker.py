@@ -3,13 +3,16 @@ import datetime
 import json
 import os
 import time
+from pathlib import Path
 
+import numpy as np
 import torch
 
 from loguru import logger
 from enum import Enum, auto
 
 import chunker
+from background.combiner import convert_wav_to_opus
 from boson import initialize_synthesization, sync_voice_prompts, get_device
 from examples.generation import prepare_generation_context
 import soundfile as sf
@@ -22,6 +25,7 @@ class PageType(Enum):
     SCENARIO = auto()
     CONTINUED_SCENARIO = auto()
     UNKNOWN = auto()
+
 
 def log_cuda_memory():
     """Log CUDA memory allocation and reservation in MB."""
@@ -117,7 +121,7 @@ def synthesize_audio(model_client, text, voice, filename, max_chunk_size=120):
 
     ras_win_len = 32
     ras_win_max_num_repeat = 4
-    generation_chunk_buffer_size = 3
+    generation_chunk_buffer_size = 0
 
     temperature = voice["temperature"]
     top_k = voice["top_k"]
@@ -137,10 +141,10 @@ def synthesize_audio(model_client, text, voice, filename, max_chunk_size=120):
         primed=primed
     )
 
-    sf.write(filename, concat_wv, sr)
-    torch.cuda.empty_cache()
+    sf.write(filename + ".wav", concat_wv, sr)
 
     return True
+
 
 def synthesization_loop(client_model,text, voice, filename):
 
@@ -202,31 +206,52 @@ def synthesization_loop(client_model,text, voice, filename):
 
     return result, max_chunk_size
 
+# Globally shared variables
+client_model = None
+tokenizer = None
+voices = None
+
 def main():
+
+    #create_sample()
 
     # scenarios()
     # sections()
     # sampler()
 
+    # introductions()
+    logger.info(f"Starting Vocalis - Synthesizing Audio")
+
+    # Load Voices
+    global voices
+
+    voice = json.load(open("./voices/First.json"))
+    voices = voice["voices"]
+    #
+    # voice = json.load(open("./voices/voice-victor.json"))
+    # voices.extend(voice["voices"])
+
+    sync_voice_prompts()
+
+    # Load models
+    global client_model, tokenizer
+    client_model, tokenizer = initialize_synthesization()
+
+    # Generate context for voices
+    generate_context_per_voice(voices, tokenizer)
+
     introductions()
+    sections()
+    scenarios()
+
+
 
 def introductions():
 
-    logger.info(f"Starting Vocalis - Synthesizing Audio")
-    # Load models
-    client_model, tokenizer = initialize_synthesization()
+    logger.info(f"Creating introduction samples")
 
-    print(torch.cuda.is_available())
-    print(torch.cuda.memory_allocated() / 1024 ** 2, torch.cuda.memory_reserved() / 1024 ** 2)
-
-    voices = json.load(open("./voices/voices.json"))
-    voices = voices["voices"]
-    sync_voice_prompts()
-
-    generate_context_per_voice(voices, tokenizer)
-
-    # only do the the first two items from voices
-    voices = voices[:2]
+    # load the sample text from file
+    sample_text = open("./voices/sample_text.txt", "r").read()
 
     # for each voice, create a folder for it
     for voice in voices:
@@ -235,43 +260,33 @@ def introductions():
         if not os.path.exists(voice_folder):
             os.makedirs(voice_folder)
 
-        filename = f"Introduction-{voice['name']}.wav"
+        filename = f"Introduction-{voice['name']}"
         filename = os.path.join(voice_folder, filename)
+
+        # check if the file already exists, if it does, skip the synthesis
+        if list(Path().glob(filename + ".*")):
+            logger.info(f"File {filename} already exists, skipping synthesis.")
+            continue
+
+        # add the sample text to the introduction
+        introduction_text = (voice["introduction"]
+                             + "This is an example of how I will narrate. "
+                             + sample_text
+                             + "You can choose me as your narrator.")
 
         # The main text
         result, chunked_size_success = synthesization_loop(client_model,
-                                                           voice["introduction"],
+                                                           introduction_text,
                                                            voice,
                                                            filename)
 
         if result:
-            print(f"Audio file saved to {filename}")
+            opus_filename = convert_wav_to_opus(filename + ".wav")
+            os.remove(filename + ".wav")
+            logger.info(f"Audio file saved to {opus_filename}")
 
 
 def sections():
-
-    logger.info(f"Starting Vocalis - Synthesizing Audio")
-    # Load models
-    client_model, tokenizer = initialize_synthesization()
-
-    print(torch.cuda.is_available())
-    print(torch.cuda.memory_allocated() / 1024 ** 2, torch.cuda.memory_reserved() / 1024 ** 2)
-
-    # Try to load voices
-    try:
-        # raise Exception("test")
-        voices = json.load(open("./voices/voices.json"))
-        voices = voices["voices"]
-        sync_voice_prompts()
-    except:
-        logger.info("No voices found, using default voice")
-        voices = list()
-        voices.append({"name": "Default", "style": None})
-
-    logger.info(f"Creating context for voices")
-
-    # generate the contexts once, to save time later
-    generate_context_per_voice(voices, tokenizer)
 
     input_file = "./input/scenarios/sections_book.json"
     book = json.load(open(input_file))
@@ -281,14 +296,15 @@ def sections():
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
-    sections_to_run = ["106.4"]
+    # sections_to_run = ["91.2", "54.1", "48.2", "90.3", "48.2", "27.2", "44.2", "15.3", "39.1", "93.3", "53.2", "96.4", "26.3", "41.2", "121.1", "96.1"  ]
+    sections_to_run = ["80.3", "186.3"]
 
     for entry in book[:]:
 
         try:
 
-            if entry["number"] not in sections_to_run:
-                continue
+            # if entry["number"] not in sections_to_run:
+            #     continue
 
             section_folder = os.path.join(output_folder, f"{entry['number']}")
 
@@ -317,7 +333,7 @@ def sections():
                 if not os.path.exists(voice_folder):
                     os.makedirs(voice_folder)
 
-                filename = "Section.wav"
+                filename = "Section"
                 filename = os.path.join(voice_folder, filename)
 
                 # The main text
@@ -346,7 +362,8 @@ def sections():
         except Exception as e:
             logger.error(e)
 
-#3
+# end
+
 def sampler():
 
     logger.info(f"Starting Vocalis - Synthesizing Audio")
@@ -377,10 +394,23 @@ No theatrical delivery, no sharpness.
 
 The voice should feel warm, calm, and slightly ethereal, like a quiet and confident female storyteller."""
 
+    elarion_prompt = """The narrator is Elaria, a calm and confident female storyteller.
+    Her voice is soft, warm, and naturally feminine, with a gentle and reassuring presence.
+    She speaks at a relaxed pace, with smooth flowing sentences and subtle pauses.
+    Emotion is restrained but present, conveying quiet confidence and calm observation rather than drama.
+    Avoid theatrical delivery. Keep the tone grounded, warm, and natural, like someone telling a story by candlelight."""
+
+    elarion_prompt = """The narrator is Elaria, a calm and confident female storyteller.
+    Her voice is soft and warm, but supported and resonant, with a gentle yet grounded presence.
+    She speaks at a relaxed pace, with smooth flowing sentences and subtle pauses.
+    Her delivery carries quiet strength and stability, avoiding breathy or airy tones.
+    Emotion is restrained but present, conveying calm confidence and steady observation rather than drama.
+    Avoid theatrical delivery, but maintain a sense of presence and weight in every line, like someone telling a story by candlelight with quiet authority."""
+
     voice = dict()
     voice["name"] = "Elaria"
     voice["style"] = elarion_prompt
-    voice["chunk_size"] = 1200
+    voice["chunk_size"] = 250
 
     messages, audio_ids = prepare_generation_context(
         scene_prompt=voice["style"],
@@ -390,54 +420,67 @@ The voice should feel warm, calm, and slightly ethereal, like a quiet and confid
         speaker_tags=[]
     )
 
-    voice["temperature"] = None
-    voice["top_k"] = None
-    voice["top_p"] = None
+    voice["temperature"] = 0.6
+    voice["top_k"] = 40
+    voice["top_p"] = 0.85
 
     voice["messages"] = messages
     voice["audio_ids"] = audio_ids
 
     filename = "Voice.wav"
-    sample = "The frost clung to the walls of Frosthaven"
+
+    sample_text = '''The harbor was silent at dawn. Fog drifted slowly across the black water, swallowing the ships one by one.
+    "Did you hear that?" Rowan whispered.
+    A bell rang somewhere in the distance.
+    Then came the sound of running footsteps, followed by a scream.
+    Captain Ellisar lowered his lantern and said quietly, "Bar the gates. Nobody leaves the city tonight." You sigh and take up your posts.'''
 
     # The main text
     result, chunked_size_success = synthesization_loop(client_model,
-                                                       sample,
+                                                       sample_text,
                                                        voice,
                                                        filename)
 
 
-
-def scenarios():
+def create_sample():
 
     logger.info(f"Starting Vocalis - Synthesizing Audio")
     # Load models
     client_model, tokenizer = initialize_synthesization()
 
-    print(torch.cuda.is_available())
-    print(torch.cuda.memory_allocated() / 1024 ** 2, torch.cuda.memory_reserved() / 1024 ** 2)
+    voices = json.load(open("./voices/voice-first.json"))
+    voices = voices["voices"]
+    sync_voice_prompts()
 
-    # Try to load voices
-    try:
-        # raise Exception("test")
-        voices = json.load(open("./voices/voices.json"))
-        voices = voices["voices"]
-        sync_voice_prompts()
-    except:
-        logger.info("No voices found, using default voice")
-        voices = list()
-        voices.append({"name": "Default", "style": None})
-
-    logger.info(f"Creating context for voices")
-
-    # generate the contexts once, to save time later
     generate_context_per_voice(voices, tokenizer)
 
-    input_file = "./input/scenarios/book.json"
-    book = json.load(open(input_file))
+    voice = voices[0]
 
-    # only get the first voice for testing
-    # voices = [voices[0], voices[3]]
+    sample_text = '''The harbor was silent at dawn. Nobody spoke as the fog rolled across the water.
+                  "Did you hear that?" Rowan whispered.
+                  A bell rang somewhere in the distance, then the screaming started.'''
+
+    sample_text = '''The harbor was silent at dawn. Fog drifted slowly across the black water, swallowing the ships one by one.
+"Did you hear that?" Rowan whispered.
+A bell rang somewhere in the distance.
+Then came the sound of running footsteps, followed by a scream.
+Captain Ellisar lowered his lantern and said quietly, "Bar the gates. Nobody leaves the city tonight." You sigh and take up your posts.'''
+
+    filename = "./sample.wav"
+
+    result, chunked_size_success = synthesization_loop(client_model,
+                                                       sample_text,
+                                                       voice,
+                                                       filename)
+
+    print("Done")
+
+
+
+def scenarios():
+
+    input_file = "./input/books/scenario-book.json"
+    book = json.load(open(input_file))
 
     # check if the output folder exists, if not create it
     output_folder = "./output/scenarios"
@@ -459,7 +502,7 @@ def scenarios():
                 case PageType.SCENARIO:
                     # logger.info(f"Scenario: {entry['number']} {entry['title']}")
 
-                    if entry["number"] != "68":
+                    if entry["number"] not in ["110"]: #["68", "18", "28", "30", "16", "90", "22"]:
                         continue
 
                     # pad number to be 3 digits
@@ -525,16 +568,12 @@ def scenarios():
                         if not os.path.exists(voice_folder):
                             os.makedirs(voice_folder)
 
-                        # The title
-                        # filename = "Title.wav"
-                        # filename = os.path.join(voice_folder, filename)
-                        print("there is a clip")
                         for clip in clips:
 
-                            filename = f"{clip['header']}.wav"
+                            filename = f"{clip['header']}"
                             filename = os.path.join(voice_folder, filename)
 
-                            combined_text = "..." + entry["title"] + "\n...\n" + clip["text"]
+                            combined_text = "..." + entry["title"] + "...\n" + clip["text"]
 
                             # The main text
                             result, chunked_size_success = synthesization_loop(client_model,
